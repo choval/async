@@ -1,0 +1,26 @@
+{
+    "name": "choval/async",
+    "description": "A set of functions to help coding in async",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Osvaldo Jiang",
+            "email": "osvaldo@publitar.com"
+        }
+    ],
+    "autoload": {
+      "files": [
+        "src/functions.php"
+      ]
+    },
+    "require": {
+      "clue/block-react": "^1.",
+      "react/promise-stream": "^1.",
+      "react/child-process": "^0.6",
+      "amphp/amp": "^2.1"
+    },
+    "require-dev": {
+      "phpunit/phpunit": "^7"
+    }
+}

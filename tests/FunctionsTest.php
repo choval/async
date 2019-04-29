@@ -100,11 +100,11 @@ class FunctionsTest extends TestCase {
     $rand = rand();
     $func = function() use ($loop, $rand) {
       $var = yield execute($loop, 'echo '.$rand);
-      return $var;
+      return 'yield+'.$var;
     };
     $res = sync( $loop, resolve_generator($func()) );
 
-    $this->assertEquals($rand, trim($res) );
+    $this->assertEquals('yield+'.$rand, trim($res) );
   }
 
 

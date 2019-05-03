@@ -119,10 +119,10 @@ Using a generator and `resolve_generator`
 ```php
 $ab = function() use ($loop) {
   $out = [];
-  $out[] = execute($loop, 'echo 1');
-  $out[] = execute($loop, 'echo 2');
-  $out[] = execute($loop, 'echo 3');
-  $out[] = execute($loop, 'echo 4');
+  $out[] = (int) yield execute($loop, 'echo 1');
+  $out[] = (int) yield execute($loop, 'echo 2');
+  $out[] = (int) yield execute($loop, 'echo 3');
+  $out[] = (int) yield execute($loop, 'echo 4');
   return $out;
 };
 

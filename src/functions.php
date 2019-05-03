@@ -67,9 +67,15 @@ function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode
  * Resolves a generator
  *
  */
-function resolve_generator(\Generator $gen) {
+function resolve_generator($gen) {
   $defer = new Deferred;
-  $call = \Amp\call(function() use ($gen) { return yield from $gen; });
+  if($gen instanceof \Generator) {
+    $call = \Amp\call(function() use ($gen) { return yield from $gen; });
+  } else if($gen instanceof \Closure || is_callable($gen)) {
+    $call = \Amp\call(function() use ($gen) { return $gen(); });
+  } else {
+    throw new \Exception('Unsupported generator');
+  }
   $call->onResolve(function($err, $res) use ($defer) {
     if($err) {
       return $defer->reject($err);

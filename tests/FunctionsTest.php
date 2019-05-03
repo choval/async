@@ -91,7 +91,6 @@ class FunctionsTest extends TestCase {
 
 
   /**
-   *
    * 
    */
   public function testResolveGenerator() {
@@ -105,6 +104,18 @@ class FunctionsTest extends TestCase {
     $res = sync( $loop, resolve_generator($func()) );
 
     $this->assertEquals('yield+'.$rand, trim($res) );
+
+    $ab = function() use ($loop) {
+      $out = [];
+      $out[] = (int) trim( yield execute($loop, 'echo 1') );
+      $out[] = (int) trim( yield execute($loop, 'echo 2') );
+      $out[] = (int) trim( yield execute($loop, 'echo 3') );
+      $out[] = (int) trim( yield execute($loop, 'echo 4') );
+      return $out;
+    };
+
+    $res = sync($loop, resolve_generator($ab) );
+    $this->assertEquals([1,2,3,4], $res);
   }
 
 

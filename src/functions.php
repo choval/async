@@ -23,16 +23,31 @@ use React\Promise\Stream;
  *
  */
 function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode=0, &$termSignal=0) {
+  if(is_null($timeout)) {
+    $timeout = ini_get('max_execution_time');
+  }
+  if($timeout < 0) {
+    $timeout = null;
+  }
   $defer = new Deferred;
   $buffer = '';
   $proc = new Process($cmd);
+  $timer = false;
+  if($timeout > 0) {
+    $timer = $loop->addTimer($timeout, function() use ($proc) {
+      $proc->terminate();
+    });
+  }
   $proc->start( $loop );
   $proc->stdout->on('data', function($chunk) use (&$buffer) {
     $buffer .= $chunk;
   });
-  $proc->on('exit', function($procExitCode, $procTermSignal) use ($defer, &$buffer, &$exitCode, &$termSignal, $cmd) {
+  $proc->on('exit', function($procExitCode, $procTermSignal) use ($defer, &$buffer, &$exitCode, &$termSignal, $cmd, $timer, $loop) {
     $exitCode = $procExitCode;
     $termSignal = $procTermSignal;
+    if($timer) {
+      $loop->cancelTimer($timer);
+    }
     if($exitCode) {
       return $defer->reject(new \Exception('Process finished with code: '.$exitCode));
     }
@@ -88,7 +103,13 @@ function sleep(LoopInterface $loop, float $time) {
  * Wait for a promise (makes code synchronous) or stream (buffers)
  *
  */
-function sync(LoopInterface $loop, $promise , $timeout = 2 ) {
+function sync(LoopInterface $loop, $promise ,float $timeout = -1 ) {
+  if(is_null($timeout)) {
+    $timeout = ini_get('max_execution_time');
+  }
+  if($timeout < 0) {
+    $timeout = null;
+  }
   if($promise instanceof \React\Promise\PromiseInterface) {
     return Block\await( $promise, $loop, $timeout );
   } else if($promise instanceof \Evenement\EventEmitterInterface) {

@@ -80,6 +80,9 @@ function resolve_generator($gen) {
     if($err) {
       return $defer->reject($err);
     }
+    if($res instanceof \Generator || $res instanceof \Closure) {
+      return $defer->resolve( resolve_generator($res) );
+    }
     return $defer->resolve($res);
   });
   return $defer->promise();

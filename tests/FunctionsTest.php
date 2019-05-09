@@ -111,11 +111,19 @@ class FunctionsTest extends TestCase {
       $out[] = (int) trim( yield execute($loop, 'echo 2') );
       $out[] = (int) trim( yield execute($loop, 'echo 3') );
       $out[] = (int) trim( yield execute($loop, 'echo 4') );
+      $out[] = (int) trim( yield execute($loop, 'echo 5') );
+      $out[] = (int) trim( yield execute($loop, 'echo 6') );
       return $out;
     };
 
-    $res = sync($loop, resolve_generator($ab) );
-    $this->assertEquals([1,2,3,4], $res);
+    $res = sync($loop, resolve_generator( $ab ) );
+    $this->assertEquals([1,2,3,4,5,6], $res);
+
+    $res = sync($loop, resolve_generator( $ab() ) );
+    $this->assertEquals([1,2,3,4,5,6], $res);
+
+    $res = sync($loop, resolve_generator( function() use ($ab) { return $ab; } ) );
+    $this->assertEquals([1,2,3,4,5,6], $res);
   }
 
 

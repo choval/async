@@ -13,6 +13,7 @@ use React\Promise\Deferred;
 use React\ChildProcess\Process;
 use React\EventLoop\LoopInterface;
 use React\Promise\Stream;
+use React\Promise\RejectedPromise;
 
 
 
@@ -129,6 +130,62 @@ function sync(LoopInterface $loop, $promise ,float $timeout = -1 ) {
     return Block\await( resolve_generator( $promise ) , $loop, $timeout);
   }
   return $promise;
+}
+
+
+
+/**
+ *
+ * Runs blocking code asynchronously.
+ * Returns a promise
+ *
+ */
+function async(LoopInterface $loop, $func) {
+  // TODO: array args
+  $defer = new Deferred;
+
+  $sockets = array();
+  $domain = (strtoupper(substr(PHP_OS, 0, 3)) == 'WIN' ? AF_INET : AF_UNIX);
+  if (socket_create_pair($domain, SOCK_STREAM, 0, $sockets) === false) {
+    return new RejectedPromise( new \Exception('socket_create_pair failed: '.socket_strerror(socket_last_error()) ) );
+  }
+
+  $pid = pcntl_fork();
+  if ($pid == -1) {
+    return new RejectedPromise( new \Exception('Async fork failed') );
+  } else if ($pid) {
+    // Parent
+    $loop->addPeriodicTimer(0.001, function($timer) use ($pid, $defer, &$sockets, $loop) {
+      if(pcntl_waitpid(0, $status) != -1) {
+        $loop->cancelTimer($timer);
+        if(!pcntl_wifexited($status)) {
+          $code = pcntl_wexitstatus($status);
+          $defer->reject( new \Exception('child failed with status: '.$code) );
+          socket_close($sockets[1]);
+          socket_close($sockets[0]);
+          return;
+        }
+        $buffer = '';
+        while( ($data = socket_recv($sockets[1], $chunk, 8192, MSG_DONTWAIT)) !== false) {
+          $buffer .= $chunk;
+        }
+        $data = unserialize($buffer);
+        socket_close($sockets[1]);
+        socket_close($sockets[0]);
+        $defer->resolve($data);
+      }
+    });
+    return $defer->promise();
+  } else {
+    // Child
+    $res = call_user_func($func);
+    $res = serialize($res);
+    if (socket_write($sockets[0], $res, strlen($res)) === false) {
+      exit(1);
+    }
+    socket_close($sockets[0]);
+    exit;
+  }
 }
 
 

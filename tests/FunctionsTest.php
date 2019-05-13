@@ -9,6 +9,7 @@ use function Choval\Async\execute;
 use function Choval\Async\resolve_generator;
 use function Choval\Async\sleep;
 use function Choval\Async\sync;
+use function Choval\Async\async;
 use function Choval\Async\chain_resolve;
 
 class FunctionsTest extends TestCase {
@@ -133,22 +134,31 @@ class FunctionsTest extends TestCase {
     $loop = static::$loop;
 
     $func = function() {
-      \usleep(500);
+      usleep(500000);
       return time();
     };
     $start = time();
     $promises = [];
-    $promises[] = resolve_generator($func);
-    $promises[] = resolve_generator($func);
-    $promises[] = resolve_generator($func);
-    $promises[] = resolve_generator($func);
-    $rows = sync($loop, Promise\all($promises) );
+    $promises[] = async($loop, $func);
+    $promises[] = async($loop, $func);
+    $promises[] = async($loop, $func);
+    $promises[] = async($loop, $func);
+    $promises[] = async($loop, $func);
+    $promises[] = async($loop, $func);
+    $promises[] = async($loop, $func);
+    $promises[] = async($loop, $func);
+    $promises[] = async($loop, $func);
+    $promise = Promise\all($promises);
+    $mid = time();
+    $rows = sync($loop, $promise);
     $end = time();
     $diff = $end-$start;
-    foreach($rows as $row) {
-      $this->assertEquals($start, $row);
-    }
+
+    $this->assertEquals($start, $mid);
     $this->assertLessThanOrEqual(1, $diff);
+    foreach($rows as $row) {
+      $this->assertGreaterThanOrEqual($mid, $row);
+    }
   }
 
 

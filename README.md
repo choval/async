@@ -51,7 +51,12 @@ $out = resolve_generator($ab);
 // $out is a promise that resolves with 'hello world'
 ```
 
-This can also be used to make blocking code async.
+
+### async
+
+This can also be used to make blocking code run asynchronously.  
+Creates a fork in the background.
+
 
 ```php
 $blocking_code = function() {
@@ -59,15 +64,18 @@ $blocking_code = function() {
   return time();
 }
 $promises = [];
-$promises[] = resolve_generator( $blocking_code );
-$promises[] = resolve_generator( $blocking_code );
-$promises[] = resolve_generator( $blocking_code );
-$promises[] = resolve_generator( $blocking_code );
+$promises[] = async( $loop, $blocking_code );
+$promises[] = async( $loop, $blocking_code );
+$promises[] = async( $loop, $blocking_code );
+$promises[] = async( $loop, $blocking_code );
+$init = time();
 Promise\all($promises)
-  ->then(function($times) {
+  ->then( function($times) use ($init) {
     // $times will all be the same, as they ran simultaneously
     // instead of a one sec difference between each other.
     // Also, the promises take 1 sec to resolve instead of 4.
+
+    // All times will be equal, and larger than init by 1 sec.
   });
 ```
 

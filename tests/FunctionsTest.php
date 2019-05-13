@@ -134,10 +134,10 @@ class FunctionsTest extends TestCase {
     $loop = static::$loop;
 
     $func = function() {
-      usleep(500000);
-      return time();
+      \sleep(1);
+      return microtime(true);
     };
-    $start = time();
+    $start = microtime(true);
     $promises = [];
     $promises[] = async($loop, $func);
     $promises[] = async($loop, $func);
@@ -149,15 +149,15 @@ class FunctionsTest extends TestCase {
     $promises[] = async($loop, $func);
     $promises[] = async($loop, $func);
     $promise = Promise\all($promises);
-    $mid = time();
+    $mid = microtime(true);
     $rows = sync($loop, $promise);
-    $end = time();
-    $diff = $end-$start;
+    $end = microtime(true);
 
-    $this->assertEquals($start, $mid);
-    $this->assertLessThanOrEqual(1, $diff);
+    $this->assertLessThanOrEqual( 1, $mid-$start);
+    $this->assertLessThanOrEqual( 2, $end-$mid);
     foreach($rows as $row) {
       $this->assertGreaterThanOrEqual($mid, $row);
+      $this->assertLessThanOrEqual($end, $row);
     }
   }
 

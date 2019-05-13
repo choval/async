@@ -51,6 +51,26 @@ $out = resolve_generator($ab);
 // $out is a promise that resolves with 'hello world'
 ```
 
+This can also be used to make blocking code async.
+
+```php
+$blocking_code = function() {
+  \sleep(1);
+  return time();
+}
+$promises = [];
+$promises[] = resolve_generator( $blocking_code );
+$promises[] = resolve_generator( $blocking_code );
+$promises[] = resolve_generator( $blocking_code );
+$promises[] = resolve_generator( $blocking_code );
+Promise\all($promises)
+  ->then(function($times) {
+    // $times will all be the same, as they ran simultaneously
+    // instead of a one sec difference between each other.
+    // Also, the promises take 1 sec to resolve instead of 4.
+  });
+```
+
 ### sleep
 
 An async sleep function. This will keep your code async.

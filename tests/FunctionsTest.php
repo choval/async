@@ -3,6 +3,7 @@
 use PHPUnit\Framework\TestCase;
 use React\EventLoop\Factory;
 use React\Promise\Deferred;
+use React\Promise;
 
 use function Choval\Async\execute;
 use function Choval\Async\resolve_generator;
@@ -125,6 +126,31 @@ class FunctionsTest extends TestCase {
     $res = sync($loop, resolve_generator( function() use ($ab) { return $ab; } ) );
     $this->assertEquals([1,2,3,4,5,6], $res);
   }
+
+
+
+  public function testResolveGeneratorBlockingCode() {
+    $loop = static::$loop;
+
+    $func = function() {
+      \usleep(500);
+      return time();
+    };
+    $start = time();
+    $promises = [];
+    $promises[] = resolve_generator($func);
+    $promises[] = resolve_generator($func);
+    $promises[] = resolve_generator($func);
+    $promises[] = resolve_generator($func);
+    $rows = sync($loop, Promise\all($promises) );
+    $end = time();
+    $diff = $end-$start;
+    foreach($rows as $row) {
+      $this->assertEquals($start, $row);
+    }
+    $this->assertLessThanOrEqual(1, $diff);
+  }
+
 
 
 }

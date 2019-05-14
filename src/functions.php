@@ -140,8 +140,7 @@ function sync(LoopInterface $loop, $promise ,float $timeout = -1 ) {
  * Returns a promise
  *
  */
-function async(LoopInterface $loop, $func) {
-  // TODO: array args
+function async(LoopInterface $loop, $func, array $args=[]) {
   $defer = new Deferred;
 
   $sockets = array();
@@ -178,7 +177,7 @@ function async(LoopInterface $loop, $func) {
     return $defer->promise();
   } else {
     // Child
-    $res = call_user_func($func);
+    $res = call_user_func_array($func, $args);
     $res = serialize($res);
     if (socket_write($sockets[0], $res, strlen($res)) === false) {
       exit(1);

@@ -130,7 +130,7 @@ class FunctionsTest extends TestCase {
 
 
 
-  public function testResolveGeneratorBlockingCode() {
+  public function testAsyncBlockingCode() {
     $loop = static::$loop;
 
     $func = function() {
@@ -161,6 +161,17 @@ class FunctionsTest extends TestCase {
     }
   }
 
+
+  public function testAsyncArguments() {
+    $loop = static::$loop;
+
+    $func = function($a, $b, $c) {
+      return $a + $b + $c;
+    };
+    $vals = [1,2,3];
+    $res = sync( $loop, async( $loop, $func, $vals ) );
+    $this->assertEquals( array_sum($vals), $res );
+  }
 
 
 }

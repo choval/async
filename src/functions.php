@@ -149,6 +149,9 @@ function retry(LoopInterface $loop, $func, int &$retries=10, float $frequency=0.
       $defer->resolve($res);
     })
     ->otherwise(function($e) use ($defer, $func, $frequency, &$retries, $type, $loop) {
+      if(!$retries) {
+        return $defer->reject($e);
+      }
       $error_message = $e->getMessage();
       if($type == $error_message || $e instanceof $type) {
         $loop->addTimer( $frequency, function() use ($defer, $func, $frequency, &$retries, $type, $loop) {

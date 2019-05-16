@@ -14,8 +14,7 @@ use React\ChildProcess\Process;
 use React\EventLoop\LoopInterface;
 use React\Promise\Stream;
 use React\Promise\RejectedPromise;
-
-
+use React\Promise;
 
 
 /**
@@ -132,6 +131,35 @@ function sync(LoopInterface $loop, $promise ,float $timeout = -1 ) {
   return $promise;
 }
 
+
+
+/**
+ *
+ * Retries a function for X times and eventually returns the exception.
+ *
+ */
+function retry(LoopInterface $loop, $func, int &$retries=10, float $frequency=0.1, string $type=null) {
+  if(is_null($type)) {
+    $type = \Exception::class;
+  }
+  $defer = new Deferred;
+  $retries--;
+  resolve_generator( $func )
+    ->then(function($res) use ($defer) {
+      $defer->resolve($res);
+    })
+    ->otherwise(function($e) use ($defer, $func, $frequency, &$retries, $type, $loop) {
+      $error_message = $e->getMessage();
+      if($type == $error_message || $e instanceof $type) {
+        $loop->addTimer( $frequency, function() use ($defer, $func, $frequency, &$retries, $type, $loop) {
+          $defer->resolve( retry( $loop, $func, $retries, $frequency, $type ) );
+        });
+      } else {
+        $defer->reject($e);
+      }
+    });
+  return $defer->promise();
+}
 
 
 /**

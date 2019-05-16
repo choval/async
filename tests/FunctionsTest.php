@@ -11,6 +11,7 @@ use function Choval\Async\sleep;
 use function Choval\Async\sync;
 use function Choval\Async\async;
 use function Choval\Async\chain_resolve;
+use function Choval\Async\retry;
 
 class FunctionsTest extends TestCase {
   
@@ -171,6 +172,24 @@ class FunctionsTest extends TestCase {
     $vals = [1,2,3];
     $res = sync( $loop, async( $loop, $func, $vals ) );
     $this->assertEquals( array_sum($vals), $res );
+  }
+
+
+  public function testRetry() {
+    $loop = static::$loop;
+
+    $times = 5;
+    $func = function() use (&$times) {
+      if(--$times) {
+        throw new \Exception('bad error');
+      }
+      return true;
+    };
+    $retries = 6;
+    $res = sync( $loop, retry( $loop, $func, $retries ) );
+    $this->assertTrue($res);
+    $this->assertEquals( 1, $retries);
+    $this->assertEquals( 0, $times);
   }
 
 

@@ -161,6 +161,37 @@ resolve_generator($ab)
   });
 ```
 
+### retry
+
+Retries a function multiples times before finally accepting the exception.  
+This can catch a specific Exception class or message.
+
+```
+$times = 5;
+$func = function() use (&$times) {
+  if(--$times) {
+    throw new \Exception('bad error');
+  }
+  return 'good';
+};
+$retries = 8;
+retry($loop, $func, $retries, 0.1, 'bad error')
+  ->then(function($res) use (&$retries, &$times) {
+    // $res is 'good'
+    // $retries is 3
+    // $times is 0
+  });
+```
+
+```
+Parameters:
+  LoopInterface $loop
+  Closure or Generator $func
+  int &$retries=10,
+  float $frequency=0.1 (seconds)
+  string $type='Exception' (Exception class or specific Exception Message)
+```
+
 ## License
 
 MIT, see LICENSE

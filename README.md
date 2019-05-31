@@ -166,7 +166,7 @@ resolve_generator($ab)
 Retries a function multiples times before finally accepting the exception.  
 This can catch a specific Exception class or message.
 
-```
+```php
 $times = 5;
 $func = function() use (&$times) {
   if(--$times) {

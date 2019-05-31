@@ -125,7 +125,7 @@ function sync(LoopInterface $loop, $promise ,float $timeout = -1 ) {
     return Block\await( Stream\buffer( $promise ), $loop, $timeout );
   } else if(is_array($promise)) {
     return Block\awaitAll( $promise, $loop, $timeout );
-  } else if($promise instanceof \Generator) {
+  } else if($promise instanceof \Generator || $promise instanceof \Closure) {
     return Block\await( resolve_generator( $promise ) , $loop, $timeout);
   }
   return $promise;

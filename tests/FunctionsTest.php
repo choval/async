@@ -179,15 +179,16 @@ class FunctionsTest extends TestCase {
     $loop = static::$loop;
 
     $times = 5;
-    $func = function() use (&$times) {
+    $id = uniqid();
+    $func = function() use (&$times, $id) {
       if(--$times) {
         throw new \Exception('bad error');
       }
-      return true;
+      return $id;
     };
     $retries = 6;
     $res = sync( $loop, retry( $loop, $func, $retries ) );
-    $this->assertTrue($res);
+    $this->assertEquals($id, $res);
     $this->assertEquals( 1, $retries);
     $this->assertEquals( 0, $times);
   }

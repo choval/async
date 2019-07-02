@@ -142,26 +142,24 @@ function retry(LoopInterface $loop, $func, int &$retries=10, float $frequency=0.
   if(is_null($type)) {
     $type = \Exception::class;
   }
-  $defer = new Deferred;
-  $retries--;
-  resolve_generator( $func )
-    ->then(function($res) use ($defer) {
-      $defer->resolve($res);
-    })
-    ->otherwise(function($e) use ($defer, $func, $frequency, &$retries, $type, $loop) {
-      if(!$retries) {
-        return $defer->reject($e);
+  $resolver = function() use($loop, $frequency, &$retries, $func, $type) {
+    $last = false;
+    while($retries--) {
+      try {
+        $res = yield resolve_generator($func);
+        return $res;
+      } catch(\Exception $e) {
+        $last = $e;
+        $msg = $e->getMessage();
+        if($msg != $type && !($e instanceof $type)) {
+          throw $e;
+        }
       }
-      $error_message = $e->getMessage();
-      if($type == $error_message || $e instanceof $type) {
-        $loop->addTimer( $frequency, function() use ($defer, $func, $frequency, &$retries, $type, $loop) {
-          $defer->resolve( retry( $loop, $func, $retries, $frequency, $type ) );
-        });
-      } else {
-        $defer->reject($e);
-      }
-    });
-  return $defer->promise();
+      yield sleep($loop, $frequency);
+    }
+    throw $last;
+  };
+  return resolve_generator($resolver);
 }
 
 

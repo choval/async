@@ -35,6 +35,10 @@ function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode
   $timer = false;
   if($timeout > 0) {
     $timer = $loop->addTimer($timeout, function() use ($proc) {
+      $proc->stdin->end();
+      foreach ($proc->pipes as $pipe) {
+        $pipe->close();
+      }
       $proc->terminate();
     });
   }

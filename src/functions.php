@@ -46,13 +46,20 @@ function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode
   $proc->stdout->on('data', function($chunk) use (&$buffer) {
     $buffer .= $chunk;
   });
-  $proc->on('exit', function($procExitCode, $procTermSignal) use ($defer, &$buffer, &$exitCode, &$termSignal, $cmd, $timer, $loop) {
+  $err;
+  $proc->stdout->on('error', function(\Exception $e) use (&$err) {
+    $err = $e;
+  });
+  $proc->on('exit', function($procExitCode, $procTermSignal) use ($defer, &$buffer, &$exitCode, &$termSignal, $cmd, $timer, $loop, &$err) {
     $exitCode = $procExitCode;
     $termSignal = $procTermSignal;
     if($timer) {
       $loop->cancelTimer($timer);
     }
     if($exitCode) {
+      if($err) {
+        return $defer->reject($err);
+      }
       return $defer->reject(new \Exception('Process finished with code: '.$exitCode));
     }
     $defer->resolve($buffer);

@@ -39,7 +39,7 @@ function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode
       foreach ($proc->pipes as $pipe) {
         $pipe->close();
       }
-      $proc->terminate();
+      $proc->terminate( \SIGKILL ?? 9 );
     });
   }
   $proc->start( $loop );

@@ -56,6 +56,10 @@ function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode
     if($timer) {
       $loop->cancelTimer($timer);
     }
+    // Clears any hanging processes
+    $loop->addTimer(1, function() {
+      pcntl_waitpid(-1, $status, WNOHANG);
+    });
     if($exitCode) {
       if($err) {
         return $defer->reject($err);

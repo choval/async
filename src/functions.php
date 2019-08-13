@@ -33,20 +33,21 @@ function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode
   $buffer = '';
   $proc = new Process($cmd);
   $timer = false;
+  $err;
   if($timeout > 0) {
-    $timer = $loop->addTimer($timeout, function() use ($proc) {
+    $timer = $loop->addTimer($timeout, function() use ($proc, &$err) {
       $proc->stdin->end();
       foreach ($proc->pipes as $pipe) {
         $pipe->close();
       }
       $proc->terminate( \SIGKILL ?? 9 );
+      $err = new \Exception('Process killed because of timeout');
     });
   }
   $proc->start( $loop );
   $proc->stdout->on('data', function($chunk) use (&$buffer) {
     $buffer .= $chunk;
   });
-  $err;
   $proc->stdout->on('error', function(\Exception $e) use (&$err) {
     $err = $e;
   });
@@ -60,10 +61,10 @@ function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode
     $loop->addTimer(1, function() {
       pcntl_waitpid(-1, $status, WNOHANG);
     });
+    if($err) {
+      return $defer->reject($err);
+    }
     if($exitCode) {
-      if($err) {
-        return $defer->reject($err);
-      }
       return $defer->reject(new \Exception('Process finished with code: '.$exitCode));
     }
     $defer->resolve($buffer);
@@ -127,12 +128,12 @@ function sleep(LoopInterface $loop, float $time) {
  * Wait for a promise (makes code synchronous) or stream (buffers)
  *
  */
-function sync(LoopInterface $loop, $promise ,float $timeout = -1 ) {
+function sync(LoopInterface $loop, $promise, float $timeout = NULL ) {
   if(is_null($timeout)) {
     $timeout = ini_get('max_execution_time');
   }
-  if($timeout < 0) {
-    $timeout = null;
+  if($timeout <= 0) {
+    $timeout = NULL;
   }
   if($promise instanceof \React\Promise\PromiseInterface) {
     return Block\await( $promise, $loop, $timeout );
@@ -158,19 +159,19 @@ function retry(LoopInterface $loop, $func, int &$retries=10, float $frequency=0.
     $type = \Exception::class;
   }
   $resolver = function() use($loop, $frequency, &$retries, $func, $type) {
-    $last = false;
+    $last = new \Exception('Failed retries');
     while($retries--) {
       try {
         $res = yield resolve_generator($func);
         return $res;
       } catch(\Exception $e) {
+        yield sleep($loop, $frequency);
         $last = $e;
         $msg = $e->getMessage();
         if($msg != $type && !($e instanceof $type)) {
           throw $e;
         }
       }
-      yield sleep($loop, $frequency);
     }
     throw $last;
   };

@@ -35,6 +35,15 @@ class FunctionsTest extends TestCase {
   }
 
 
+  /**
+   * @depends testSync
+   */
+  public function testSyncTimeout() {
+    $loop = static::$loop;
+
+    $this->expectException( \React\Promise\Timer\TimeoutException::class );
+    $res = sync( $loop, sleep($loop, 2), 1);
+  }
 
 
   /**
@@ -46,6 +55,16 @@ class FunctionsTest extends TestCase {
 
     $res = sync( $loop, execute( $loop, 'echo '.$rand) );
     $this->assertEquals( $rand, trim($res) );
+  }
+
+
+  /**
+   * @depends testExecute
+   */
+  public function testExecuteKill() {
+    $loop = static::$loop;
+    $this->expectException( \Exception::class);
+    $res = sync( $loop, execute( $loop, 'sleep 2', 1) );
   }
 
 

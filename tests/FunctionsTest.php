@@ -42,7 +42,7 @@ class FunctionsTest extends TestCase {
     $loop = static::$loop;
 
     $this->expectException( \React\Promise\Timer\TimeoutException::class );
-    $res = sync( $loop, sleep($loop, 2), 1);
+    $res = sync( $loop, sleep($loop, 1), 0.5);
   }
 
 
@@ -64,7 +64,7 @@ class FunctionsTest extends TestCase {
   public function testExecuteKill() {
     $loop = static::$loop;
     $this->expectException( \Exception::class);
-    $res = sync( $loop, execute( $loop, 'sleep 2', 1) );
+    $res = sync( $loop, execute( $loop, 'sleep 1', 0.5) );
   }
 
 

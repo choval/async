@@ -10,20 +10,21 @@
         }
     ],
     "autoload": {
-      "psr-4": {
-        "Choval\\Async\\": "src/"
-      },
-      "files": [
-        "src/functions.php"
-      ]
+        "psr-4": {
+            "Choval\\Async\\": "src/"
+        },
+        "files": [
+            "src/functions.php"
+        ]
     },
     "require": {
-      "clue/block-react": "^1.",
-      "react/promise-stream": "^1.",
-      "react/child-process": "^0.6",
-      "amphp/amp": "^2.1"
+        "clue/block-react": "^1.",
+        "react/promise-stream": "^1.",
+        "react/child-process": "^0.6",
+        "amphp/amp": "^2.1"
     },
     "require-dev": {
-      "phpunit/phpunit": "^7"
+        "symplify/easy-coding-standard": "^6.0",
+        "phpunit/phpunit": "^7"
     }
 }

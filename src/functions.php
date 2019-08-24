@@ -1,4 +1,5 @@
 <?php
+
 namespace Choval\Async;
 
 /**
@@ -9,22 +10,21 @@ namespace Choval\Async;
  */
 
 use Clue\React\Block;
-use React\Promise\Deferred;
 use React\ChildProcess\Process;
 use React\EventLoop\LoopInterface;
-use React\Promise\Stream;
-use React\Promise\RejectedPromise;
 use React\Promise;
-
-
+use React\Promise\Deferred;
+use React\Promise\RejectedPromise;
+use React\Promise\Stream;
 
 /**
  *
  * Executes a command, returns the buffered response
  *
  */
-function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode=0, &$termSignal=0) {
-  return Async::execute($loop, $cmd, $timeout, $exitCode, $termSignal);
+function execute(LoopInterface $loop, string $cmd, float $timeout = -1, &$exitCode = 0, &$termSignal = 0)
+{
+    return Async::execute($loop, $cmd, $timeout, $exitCode, $termSignal);
 }
 
 
@@ -34,8 +34,9 @@ function execute(LoopInterface $loop, string $cmd, float $timeout=-1, &$exitCode
  * Resolves a generator
  *
  */
-function resolve_generator($gen) {
-  return Async::resolve_generator($gen);
+function resolve_generator($gen)
+{
+    return Async::resolve_generator($gen);
 }
 
 
@@ -45,8 +46,9 @@ function resolve_generator($gen) {
  * Non blocking sleep, that allows Loop to keep ticking in the back
  *
  */
-function sleep(LoopInterface $loop, float $time) {
-  return Async::sleep($loop, $time);
+function sleep(LoopInterface $loop, float $time)
+{
+    return Async::sleep($loop, $time);
 }
 
 
@@ -56,8 +58,21 @@ function sleep(LoopInterface $loop, float $time) {
  * Wait for a promise (makes code synchronous) or stream (buffers)
  *
  */
-function sync(LoopInterface $loop, $promise, float $timeout = NULL ) {
-  return Async::sync($loop, $promise, $timeout);
+function sync(LoopInterface $loop, $promise, float $timeout = null)
+{
+    return Async::sync($loop, $promise, $timeout);
+}
+
+
+
+/**
+ *
+ * Wait for a promise (makes code synchronous) or stream (buffers)
+ *
+ */
+function wait(LoopInterface $loop, $promise, float $timeout = null)
+{
+    return Async::wait($loop, $promise, $timeout);
 }
 
 
@@ -67,8 +82,9 @@ function sync(LoopInterface $loop, $promise, float $timeout = NULL ) {
  * Retries a function for X times and eventually returns the exception.
  *
  */
-function retry(LoopInterface $loop, $func, int &$retries=10, float $frequency=0.1, string $type=null) {
-  return Async::retry($loop, $func, $retries, $frequency, $type);
+function retry(LoopInterface $loop, $func, int &$retries = 10, float $frequency = 0.1, string $type = null)
+{
+    return Async::retry($loop, $func, $retries, $frequency, $type);
 }
 
 
@@ -79,8 +95,9 @@ function retry(LoopInterface $loop, $func, int &$retries=10, float $frequency=0.
  * Returns a promise
  *
  */
-function async(LoopInterface $loop, $func, array $args=[]) {
-  return Async::async($loop, $func, $args);
+function async(LoopInterface $loop, $func, array $args = [])
+{
+    return Async::async($loop, $func, $args);
 }
 
 
@@ -93,9 +110,7 @@ function async(LoopInterface $loop, $func, array $args=[]) {
  * Receives an array of functions that will be called one after the other
  *
  */
-function chain_resolve() {
-  return call_user_func_array( [Async::class, 'chain_resolve'], func_get_args());
+function chain_resolve()
+{
+    return call_user_func_array([Async::class, 'chain_resolve'], func_get_args());
 }
-
-
-

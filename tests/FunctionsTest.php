@@ -182,6 +182,21 @@ class FunctionsTest extends TestCase {
   }
 
 
+
+  public function testAsyncEcho() {
+      $loop = static::$loop;
+
+      $func = function() {
+          $msg = "Hello world";
+          $this->expectOutputString($msg);
+          echo $msg;
+      };
+      $test = sync( $loop, async( $loop, $func ) );
+      $this->assertTrue(true);
+  }
+
+
+
   public function testAsyncArguments() {
     $loop = static::$loop;
 

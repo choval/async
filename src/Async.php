@@ -211,7 +211,9 @@ class Async
         $proc->stdout->on('error', function (\Exception $e) use (&$err) {
             $err = $e;
         });
-        $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err) {
+        $proc->on('exit', function ($exitCodeParam, $termSignalParam) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, &$exitCode, &$termSignal) {
+            $exitCode = $exitCodeParam;
+            $termSignal = $termSignalParam;
             if ($timer) {
                 $loop->cancelTimer($timer);
             }

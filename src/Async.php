@@ -223,7 +223,7 @@ class Async
                 return $defer->reject($err);
             }
             if ($exitCode) {
-                return $defer->reject(new \Exception('Process finished with code: ' . $exitCode));
+                return $defer->reject(new \Exception($buffer));
             }
             $defer->resolve($buffer);
         });

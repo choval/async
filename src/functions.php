@@ -43,6 +43,19 @@ function resolve_generator($gen)
 
 /**
  *
+ * Resolves a function, returning always a promise
+ *
+ */
+function resolve($gen)
+{
+    return Async::resolve($gen);
+}
+
+
+
+
+/**
+ *
  * Non blocking sleep, that allows Loop to keep ticking in the back
  *
  */

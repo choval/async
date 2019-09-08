@@ -234,6 +234,15 @@ class Async
 
 
     /**
+     * Resolve
+     */
+    public static function resolve($gen)
+    {
+        return static::resolve_generator($gen);
+    }
+
+
+    /**
      * Resolve generator
      */
     public static function resolve_generator($gen)

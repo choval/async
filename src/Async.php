@@ -234,10 +234,13 @@ class Async
 
 
     /**
-     * Resolve
+     * Resolve anything, returns a promise
      */
     public static function resolve($gen)
     {
+        if ($gen instanceof PromiseInterface) {
+            return $gen;
+        }
         return static::resolve_generator($gen);
     }
 

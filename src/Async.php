@@ -244,6 +244,7 @@ class Async
 
     /**
      * Resolve generator
+     * TODO: Stream
      */
     public static function resolve_generator($gen)
     {
@@ -258,7 +259,7 @@ class Async
         } else if ($gen instanceof PromiseInterface) {
             return $gen;
         } else {
-            throw new \Exception('Unsupported generator');
+            return $gen;
         }
         $defer = new Deferred();
         $call->onResolve(function ($err, $res) use ($defer) {

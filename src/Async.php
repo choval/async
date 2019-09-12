@@ -259,7 +259,7 @@ class Async
         } else if ($gen instanceof PromiseInterface) {
             return $gen;
         } else {
-            return $gen;
+            return new FulfilledPromise($gen);
         }
         $defer = new Deferred();
         $call->onResolve(function ($err, $res) use ($defer) {

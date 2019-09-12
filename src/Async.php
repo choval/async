@@ -238,9 +238,6 @@ class Async
      */
     public static function resolve($gen)
     {
-        if ($gen instanceof PromiseInterface) {
-            return $gen;
-        }
         return static::resolve_generator($gen);
     }
 
@@ -250,7 +247,6 @@ class Async
      */
     public static function resolve_generator($gen)
     {
-        $defer = new Deferred();
         if ($gen instanceof Generator) {
             $call = Amp\call(function () use ($gen) {
                 return yield from $gen;
@@ -259,9 +255,12 @@ class Async
             $call = Amp\call(function () use ($gen) {
                 return $gen();
             });
+        } else if ($gen instanceof PromiseInterface) {
+            return $gen;
         } else {
             throw new \Exception('Unsupported generator');
         }
+        $defer = new Deferred();
         $call->onResolve(function ($err, $res) use ($defer) {
             if ($err) {
                 return $defer->reject($err);

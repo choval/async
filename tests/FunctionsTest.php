@@ -166,6 +166,19 @@ class FunctionsTest extends TestCase {
         $msg = $e->getMessage();
     }
     $this->assertEquals($rand, $msg);
+
+    $func2 = function() {
+        throw new \Exception('Crap');
+    };
+
+    $func3 = function() use ($func2) {
+        $var = yield $func2();
+        return $var;
+    };
+
+    $this->expectException( \Exception::class );
+    $this->expectExceptionMessage('Crap');
+    $msg = sync( $loop, resolve($func3) , 1);
   }
 
 

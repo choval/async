@@ -251,10 +251,24 @@ class Async
         if ($gen instanceof Generator) {
             $call = Amp\call(function () use ($gen) {
                 return yield from $gen;
+                /*
+                try {
+                    return yield from $gen;
+                } catch(\Throwable $e) {
+                    return $e;
+                }
+                 */
             });
         } elseif ($gen instanceof Closure || is_callable($gen)) {
             $call = Amp\call(function () use ($gen) {
                 return $gen();
+                /*
+                try {
+                    return $gen();
+                } catch(\Throwable $e) {
+                    return $e;
+                }
+                 */
             });
         } else if ($gen instanceof PromiseInterface) {
             return $gen;
@@ -267,7 +281,10 @@ class Async
                 return $defer->reject($err);
             }
             if ($res instanceof Generator || $res instanceof Closure) {
-                return $defer->resolve(resolve_generator($res));
+                $res = resolve_generator($res);
+            }
+            if ($res instanceof \Throwable) {
+                return $defer->reject($res);
             }
             return $defer->resolve($res);
         });

@@ -7,6 +7,7 @@ use React\Promise;
 
 use function Choval\Async\execute;
 use function Choval\Async\resolve_generator;
+use function Choval\Async\resolve;
 use function Choval\Async\sleep;
 use function Choval\Async\sync;
 use function Choval\Async\async;
@@ -146,6 +147,25 @@ class FunctionsTest extends TestCase {
 
     $res = sync($loop, resolve_generator( function() use ($ab) { return $ab; } ) );
     $this->assertEquals([1,2,3,4,5,6], $res);
+  }
+
+
+
+  public function testResolveWithException() {
+    $loop = static::$loop;
+    $rand = rand();
+    $func = function() use ($loop, $rand) {
+        $var = yield execute($loop, 'echo '.$rand);
+        $var = trim($var);
+        throw new \Exception($var);
+        return 'fail';
+    };
+    try {
+        $msg = sync( $loop, resolve($func) );
+    } catch(\Exception $e) {
+        $msg = $e->getMessage();
+    }
+    $this->assertEquals($rand, $msg);
   }
 
 

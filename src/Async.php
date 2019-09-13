@@ -289,7 +289,7 @@ class Async
                 try {
                     $res = yield resolve_generator($func);
                     return $res;
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     yield sleep($loop, $frequency);
                     $last = $e;
                     $msg = $e->getMessage();

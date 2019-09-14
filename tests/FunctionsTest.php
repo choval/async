@@ -5,13 +5,7 @@ use React\EventLoop\Factory;
 use React\Promise;
 use React\Promise\Deferred;
 
-use function Choval\Async\async;
-use function Choval\Async\chain_resolve;
-use function Choval\Async\execute;
-use function Choval\Async\resolve;
-use function Choval\Async\retry;
-use function Choval\Async\sleep;
-use function Choval\Async\sync;
+use Choval\Async;
 
 class FunctionsTest extends TestCase
 {
@@ -20,6 +14,7 @@ class FunctionsTest extends TestCase
     public static function setUpBeforeClass(): void
     {
         static::$loop = Factory::create();
+        Async\set_loop( static::$loop );
     }
 
 
@@ -27,12 +22,14 @@ class FunctionsTest extends TestCase
 
     public function testSync()
     {
-        $loop = static::$loop;
         $rand = rand();
 
         $defer = new Deferred();
         $defer->resolve($rand);
-        $res = sync($loop, $defer->promise());
+        $res = Async\sync($defer->promise());
+        $this->assertEquals($rand, $res);
+
+        $res = Async\wait($defer->promise());
         $this->assertEquals($rand, $res);
     }
 
@@ -42,10 +39,8 @@ class FunctionsTest extends TestCase
      */
     public function testSyncTimeout()
     {
-        $loop = static::$loop;
-
         $this->expectException(\React\Promise\Timer\TimeoutException::class);
-        $res = sync($loop, sleep($loop, 1), 0.5);
+        $res = Async\wait(Async\sleep(1), 0.5);
     }
 
 
@@ -54,11 +49,14 @@ class FunctionsTest extends TestCase
      */
     public function testExecute()
     {
-        $loop = static::$loop;
         $rand = rand();
 
-        $res = sync($loop, execute($loop, 'echo ' . $rand));
+        $res = Async\wait(Async\execute('echo ' . $rand, 1));
         $this->assertEquals($rand, trim($res));
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionCode(127);
+        $res = Async\wait(Async\execute('non-existing-command', 1));
     }
 
 
@@ -67,9 +65,8 @@ class FunctionsTest extends TestCase
      */
     public function testExecuteKill()
     {
-        $loop = static::$loop;
         $this->expectException(\Exception::class);
-        $res = sync($loop, execute($loop, 'sleep 1', 0.5));
+        $res = Async\wait(Async\execute('sleep 1', 0.5));
     }
 
 
@@ -80,12 +77,10 @@ class FunctionsTest extends TestCase
      */
     public function testSleep()
     {
-        $loop = static::$loop;
         $delay = 0.5;
  
         $start = microtime(true);
-        sync($loop, sleep($loop, $delay));
-
+        Async\wait(Async\sleep($delay));
         $diff = microtime(true) - $start;
         $this->assertGreaterThanOrEqual($delay, $diff);
     }
@@ -97,35 +92,33 @@ class FunctionsTest extends TestCase
      */
     public function testResolveGenerator()
     {
-        $loop = static::$loop;
-
         $rand = rand();
-        $func = function () use ($loop, $rand) {
-            $var = yield execute($loop, 'echo ' . $rand);
+        $func = function () use ($rand) {
+            $var = yield Async\execute('echo ' . $rand);
             return 'yield+' . $var;
         };
-        $res = sync($loop, resolve($func()));
+        $res = Async\wait(Async\resolve($func()));
 
         $this->assertEquals('yield+' . $rand, trim($res));
 
-        $ab = function () use ($loop) {
+        $ab = function () {
             $out = [];
-            $out[] = (int) trim(yield execute($loop, 'echo 1'));
-            $out[] = (int) trim(yield execute($loop, 'echo 2'));
-            $out[] = (int) trim(yield execute($loop, 'echo 3'));
-            $out[] = (int) trim(yield execute($loop, 'echo 4'));
-            $out[] = (int) trim(yield execute($loop, 'echo 5'));
-            $out[] = (int) trim(yield execute($loop, 'echo 6'));
+            $out[] = (int) trim(yield Async\execute('echo 1'));
+            $out[] = (int) trim(yield Async\execute('echo 2'));
+            $out[] = (int) trim(yield Async\execute('echo 3'));
+            $out[] = (int) trim(yield Async\execute('echo 4'));
+            $out[] = (int) trim(yield Async\execute('echo 5'));
+            $out[] = (int) trim(yield Async\execute('echo 6'));
             return $out;
         };
 
-        $res = sync($loop, resolve($ab));
+        $res = Async\wait(Async\resolve($ab));
         $this->assertEquals([1, 2, 3, 4, 5, 6], $res);
 
-        $res = sync($loop, resolve($ab()));
+        $res = Async\wait(Async\resolve($ab()));
         $this->assertEquals([1, 2, 3, 4, 5, 6], $res);
 
-        $res = sync($loop, resolve(function () use ($ab) {
+        $res = Async\wait(Async\resolve(function () use ($ab) {
             return $ab;
         }));
         $this->assertEquals([1, 2, 3, 4, 5, 6], $res);
@@ -135,16 +128,15 @@ class FunctionsTest extends TestCase
 
     public function testResolveWithException()
     {
-        $loop = static::$loop;
         $rand = rand();
-        $func = function () use ($loop, $rand) {
-            $var = yield execute($loop, 'echo ' . $rand);
+        $func = function () use ($rand) {
+            $var = yield Async\execute('echo ' . $rand);
             $var = trim($var);
             throw new \Exception($var);
             return 'fail';
         };
         try {
-            $msg = sync($loop, resolve($func));
+            $msg = Async\wait(Async\resolve($func));
         } catch (\Exception $e) {
             $msg = $e->getMessage();
         }
@@ -161,7 +153,7 @@ class FunctionsTest extends TestCase
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Crap');
-        $msg = sync($loop, resolve($func3), 1);
+        $msg = Async\wait(Async\resolve($func3), 1);
     }
 
 
@@ -174,31 +166,29 @@ class FunctionsTest extends TestCase
      */
     public function testChainResolve()
     {
-        $loop = static::$loop;
-
         $calls = [
-            function () use ($loop) {
-                return execute($loop, 'sleep 0.1 && echo 1');
+            function () {
+                return Async\execute('sleep 0.1 && echo 1');
             },
-            function () use ($loop) {
-                return execute($loop, 'sleep 0.1 && echo 2');
+            function () {
+                return Async\execute('sleep 0.1 && echo 2');
             },
-            function () use ($loop) {
-                return execute($loop, 'sleep 0.1 && echo 3');
+            function () {
+                return Async\execute('sleep 0.1 && echo 3');
             },
-            function () use ($loop) {
-                return execute($loop, 'sleep 0.1 && echo 4');
+            function () {
+                return Async\execute('sleep 0.1 && echo 4');
             }
         ];
-        $res = chain_resolve($calls);
-        $responses = sync($loop, $res, 1);
+        $res = Async\chain_resolve($calls);
+        $responses = Async\wait($res, 1);
         $this->assertEquals('1', trim($responses[0]));
         $this->assertEquals('2', trim($responses[1]));
         $this->assertEquals('3', trim($responses[2]));
         $this->assertEquals('4', trim($responses[3]));
 
         $res = call_user_func_array('Choval\\Async\\chain_resolve', $calls);
-        $responses = sync($loop, $res, 1);
+        $responses = Async\wait($res, 1);
         $this->assertEquals('1', trim($responses[0]));
         $this->assertEquals('2', trim($responses[1]));
         $this->assertEquals('3', trim($responses[2]));
@@ -209,7 +199,6 @@ class FunctionsTest extends TestCase
 
     public function testAsyncBlockingCode()
     {
-        $loop = static::$loop;
         $times = 10;
         $sleep_secs = 1;
 
@@ -220,11 +209,11 @@ class FunctionsTest extends TestCase
         $start = microtime(true);
         $promises = [];
         for ($i = 0;$i < $times;$i++) {
-            $promises[] = async($loop, $func);
+            $promises[] = Async\async($func);
         }
         $promise = Promise\all($promises);
         $mid = microtime(true);
-        $rows = sync($loop, $promise, $sleep_secs * 2);
+        $rows = Async\wait($promise, $sleep_secs * 2);
         $end = microtime(true);
 
         $this->assertLessThanOrEqual(1, $mid - $start);
@@ -239,14 +228,12 @@ class FunctionsTest extends TestCase
 
     public function testAsyncEcho()
     {
-        $loop = static::$loop;
-
         $func = function () {
             $msg = "Hello world";
             $this->expectOutputString($msg);
             echo $msg;
         };
-        $test = sync($loop, async($loop, $func));
+        $test = Async\wait(Async\async($func));
         $this->assertTrue(true);
     }
 
@@ -254,21 +241,17 @@ class FunctionsTest extends TestCase
 
     public function testAsyncArguments()
     {
-        $loop = static::$loop;
-
         $func = function ($a, $b, $c) {
             return $a + $b + $c;
         };
         $vals = [1, 2, 3];
-        $res = sync($loop, async($loop, $func, $vals));
+        $res = Async\wait(Async\async($func, $vals));
         $this->assertEquals(array_sum($vals), $res);
     }
 
 
     public function testRetry()
     {
-        $loop = static::$loop;
-
         $times = 5;
         $id = uniqid();
         $func = function () use (&$times, $id) {
@@ -278,9 +261,8 @@ class FunctionsTest extends TestCase
             return $id;
         };
         $retries = 6;
-        $res = sync($loop, retry($loop, $func, $retries));
+        $res = Async\wait(Async\retry($func, $retries));
         $this->assertEquals($id, $res);
-        $this->assertEquals(1, $retries);
         $this->assertEquals(0, $times);
     }
 }

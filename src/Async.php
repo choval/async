@@ -1,5 +1,4 @@
 <?php
-
 namespace Choval\Async;
 
 use Closure;
@@ -25,7 +24,9 @@ class Async
 
 
     /**
-     * Sets the loop
+     *
+     * Sets the loop to use if none passed
+     *
      */
     public static function setLoop(LoopInterface $loop)
     {
@@ -35,12 +36,14 @@ class Async
 
 
     /**
-     * Gets the loop
+     *
+     * Gets the loop to use if none passed
+     *
      */
     public static function getLoop()
     {
-        if (empty(static::$loop)) {
-            static::$loop = Factory::create();
+        if(empty(static::$loop)) {
+            throw new \Exception('ReactPHP EventLoop not set');
         }
         return static::$loop;
     }
@@ -48,43 +51,15 @@ class Async
 
 
     /**
-     * Runs the internal loop if any
-     */
-    public function runInternalLoop()
-    {
-        if ($this->internal_loop) {
-            $this->internal_loop->run();
-        }
-        return $this;
-    }
-
-
-
-    /**
-     * Gets the timeout
-     */
-    public function getTimeout()
-    {
-        if (is_null($this->timeout)) {
-            $timeout = ini_get('max_execution_time');
-            if ($timeout <= 0) {
-                return null;
-            }
-        }
-        if ($this->timeout < 0) {
-            return null;
-        }
-        return $this->timeout;
-    }
-
-
-
-    /**
      * Wait
      */
-    public static function wait(LoopInterface $loop, $promise, float $timeout = null)
+    public static function wait($promise, float $timeout = null)
     {
-        return static::sync($loop, $promise, $timeout);
+        return static::waitWithLoop( static::getLoop(), $promise, $timeout );
+    }
+    public static function waitWithLoop(LoopInterface $loop, $promise, float $timeout = null)
+    {
+        return static::syncWithLoop($loop, $promise, $timeout);
     }
 
 
@@ -92,7 +67,11 @@ class Async
     /**
      * Sync
      */
-    public static function sync(LoopInterface $loop, $promise, float $timeout = null)
+    public static function sync($promise, float $timeout = null)
+    {
+        return static::syncWithLoop( static::getLoop(), $promise, $timeout);
+    }
+    public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null)
     {
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
@@ -122,11 +101,15 @@ class Async
     /**
      * Sleep
      */
-    public static function sleep(LoopInterface $loop, float $time)
+    public static function sleep(float $time)
+    {
+        return static::sleepWithLoop( static::getLoop(), $time);
+    }
+    public static function sleepWithLoop(LoopInterface $loop, float $time)
     {
         $defer = new Deferred();
-        $loop->addTimer($time, function () use ($defer) {
-            $defer->resolve(true);
+        $loop->addTimer($time, function () use ($defer, $time) {
+            $defer->resolve($time);
         });
         return $defer->promise();
     }
@@ -136,13 +119,14 @@ class Async
     /**
      * Execute
      */
-    public static function execute(LoopInterface $loop, string $cmd, float $timeout = -1, &$exitCode = 0, &$termSignal = 0)
+    public static function execute(string $cmd, float $timeout=0)
+    {
+        return static::executeWithLoop( static::getLoop(), $cmd, $timeout);
+    }
+    public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0)
     {
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
-        }
-        if ($timeout < 0) {
-            $timeout = null;
         }
         $defer = new Deferred();
         $buffer = '';
@@ -156,7 +140,7 @@ class Async
                     $pipe->close();
                 }
                 $proc->terminate(\SIGKILL ?? 9);
-                $err = new \Exception('Process killed because of timeout');
+                $err = new \Exception('Process timed out');
             });
         }
         $proc->start($loop);
@@ -166,24 +150,27 @@ class Async
         $proc->stdout->on('error', function (\Exception $e) use (&$err) {
             $err = $e;
         });
-        $proc->on('exit', function ($exitCodeParam, $termSignalParam) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, &$exitCode, &$termSignal) {
-            $exitCode = $exitCodeParam;
-            $termSignal = $termSignalParam;
+        $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err) {
             if ($timer) {
                 $loop->cancelTimer($timer);
             }
             // Clears any hanging processes
             $loop->addTimer(1, function () {
-                pcntl_waitpid(-1, $status, WNOHANG);
+                pcntl_waitpid(-1, $status, \WNOHANG);
             });
             if ($err) {
-                return $defer->reject($err);
+                $msg = $err->getMessage();
+                $e = new \Exception($msg, $termSignal, $err);
+                return $defer->reject($e);
+            }
+            if (!is_null($termSignal)) {
+                return $defer->reject(new \Exception('Process terminated with code: '.$termSignal, $termSignal));
             }
             if ($exitCode) {
                 if (!empty($buffer)) {
-                    return $defer->reject(new \Exception($buffer));
+                    return $defer->reject(new \Exception($buffer, $exitCode));
                 }
-                return $defer->reject(new \Exception('Process finish with code: ' . $exitCode));
+                return $defer->reject(new \Exception('Process exited with code: ' . $exitCode, $exitCode));
             }
             $defer->resolve($buffer);
         });
@@ -193,73 +180,18 @@ class Async
 
 
     /**
-     * Resolve Generator, for legacy, but actually alias of resolve
-     */
-    public static function resolve_generator($gen)
-    {
-        return static::resolve($gen);
-    }
-
-
-    /**
-     * Unwraps a generator and solves yielded promises
-     */
-    public static function unwrapGenerator(Generator $generator)
-    {
-        $value = $generator->current();
-        $defer = new Deferred();
-        static::resolve($value)
-            ->then(function ($res) use ($generator, $defer) {
-                $generator->send($res);
-                if ($generator->valid()) {
-                    $final = static::resolve($generator);
-                    return $defer->resolve($final);
-                }
-                $return = $generator->getReturn();
-                $defer->resolve($return);
-            })
-            ->otherwise(function ($e) use ($generator, $defer) {
-                $defer->reject($e);
-                // $generator->throw($e);
-            });
-        return $defer->promise();
-    }
-
-
-
-    /**
-     * Resolves multiple things:
-     * - Closure
-     * - Generator
-     * - Promise
-     * - Stream
-     */
-    public static function resolve($gen)
-    {
-        if ($gen instanceof Closure || is_callable($gen)) {
-            $gen = static::resolve($gen());
-        }
-        if ($gen instanceof Generator) {
-            return static::unwrapGenerator($gen);
-        } elseif ($gen instanceof PromiseInterface) {
-            return $gen;
-        } elseif ($gen instanceof EventEmitterInterface) {
-            return Stream\buffer($gen);
-        }
-        return new FulfilledPromise($gen);
-    }
-
-
-
-    /**
      * Retry
      */
-    public static function retry(LoopInterface $loop, $func, int &$retries = 10, float $frequency = 0.1, string $type = null)
+    public static function retry($func, int $retries=10, float $frequency=0.1, string $type=null)
+    {
+        return static::retryWithLoop( static::getLoop(), $func, $retries, $frequency, $type);
+    }
+    public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.1, string $type = null)
     {
         if (is_null($type)) {
             $type = \Exception::class;
         }
-        $resolver = function () use ($loop, $frequency, &$retries, $func, $type) {
+        $resolver = function () use ($loop, $frequency, $retries, $func, $type) {
             $last = new \Exception('Failed retries');
             while ($retries--) {
                 try {
@@ -284,7 +216,11 @@ class Async
     /**
      * Async
      */
-    public static function async(LoopInterface $loop, $func, array $args = [])
+    public static function async($func, $args=[])
+    {
+        return static::asyncWithLoop( static::getLoop(), $func, $args);
+    }
+    public static function asyncWithLoop(LoopInterface $loop, $func, array $args = [])
     {
         $defer = new Deferred();
 
@@ -344,6 +280,66 @@ class Async
             }
             exit;
         }
+    }
+
+
+
+    /**
+     * Resolve Generator, for legacy, but actually alias of resolve
+     */
+    public static function resolve_generator($gen)
+    {
+        return static::resolve($gen);
+    }
+
+
+
+    /**
+     * Unwraps a generator and solves yielded promises
+     */
+    public static function unwrapGenerator(Generator $generator)
+    {
+        $value = $generator->current();
+        $defer = new Deferred();
+        static::resolve($value)
+            ->then(function ($res) use ($generator, $defer) {
+                $generator->send($res);
+                if ($generator->valid()) {
+                    $final = static::resolve($generator);
+                    return $defer->resolve($final);
+                }
+                $return = $generator->getReturn();
+                $defer->resolve($return);
+            })
+            ->otherwise(function ($e) use ($generator, $defer) {
+                $defer->reject($e);
+                // $generator->throw($e);
+            });
+        return $defer->promise();
+    }
+
+
+
+    /**
+     * Resolves multiple things:
+     * - Closure
+     * - Generator
+     * - Promise
+     * - Stream
+     */
+    public static function resolve($gen)
+    {
+        if ($gen instanceof Closure || is_callable($gen)) {
+            $gen = static::resolve($gen());
+        }
+        if ($gen instanceof Generator) {
+            return static::unwrapGenerator($gen);
+        } elseif ($gen instanceof PromiseInterface) {
+            return $gen;
+        } elseif ($gen instanceof EventEmitterInterface) {
+            return Stream\buffer($gen);
+        }
+        return new FulfilledPromise($gen);
     }
 
 

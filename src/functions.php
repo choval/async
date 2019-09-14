@@ -36,7 +36,7 @@ function execute(LoopInterface $loop, string $cmd, float $timeout = -1, &$exitCo
  */
 function resolve_generator($gen)
 {
-    return Async::resolve_generator($gen);
+    return Async::resolveGenerator($gen);
 }
 
 
@@ -125,5 +125,5 @@ function async(LoopInterface $loop, $func, array $args = [])
  */
 function chain_resolve()
 {
-    return call_user_func_array([Async::class, 'chain_resolve'], func_get_args());
+    return call_user_func_array([Async::class, 'chainResolve'], func_get_args());
 }

@@ -63,54 +63,6 @@ class Async
 
 
     /**
-     * Auto set a variable
-     */
-    protected function autoSet($var)
-    {
-        if (is_object($var)) {
-            if (is_a($var, LoopInterface::class)) {
-                $this->loop = $var;
-                return $this;
-            }
-            if (is_a($var, PromiseInterface::class)) {
-                $this->func = $var;
-                $this->func_type = PromiseInterface::class;
-                return $this;
-            }
-            if (is_a($var, EventEmitterInterface::class)) {
-                $this->func = $var;
-                $this->func_type = EventEmitterInterface::class;
-                return $this;
-            }
-            if (is_array($var)) {
-                $this->func = $var;
-                $this->func_type = 'array';
-                return $this;
-            }
-            if (is_a($var, Generator::class)) {
-                $this->func = $var;
-                $this->func_type = Generator::class;
-                return $this;
-            }
-            if (is_a($var, Closure::class)) {
-                $this->func = $var;
-                $this->func_type = Closure::class;
-                return $this;
-            }
-        }
-        if (is_int($var) || is_float($var)) {
-            $this->timeout = $var;
-        }
-        if (is_string($var)) {
-            $this->vars['string'] = $var;
-        }
-        // TODO: Error
-        return $this;
-    }
-
-
-
-    /**
      * Gets the timeout
      */
     public function getTimeout()
@@ -153,9 +105,13 @@ class Async
         if ($promise instanceof EventEmitterInterface) {
             $promise = Stream\buffer($promise);
         } elseif (is_array($promise)) {
-            $promise = Promise\all($promise);
+            $promises = [];
+            foreach ($promise as $v) {
+                $promises[] = resolve($v);
+            }
+            $promise = Promise\all($promises);
         } elseif ($promise instanceof Generator || $promise instanceof Closure) {
-            $promise = resolve_generator($promise);
+            $promise = resolve($promise);
         }
         if ($promise instanceof PromiseInterface) {
             return Block\await($promise, $loop, $timeout);
@@ -176,6 +132,7 @@ class Async
         });
         return $defer->promise();
     }
+
 
 
     /**
@@ -225,12 +182,16 @@ class Async
                 return $defer->reject($err);
             }
             if ($exitCode) {
-                return $defer->reject(new \Exception($buffer));
+                if (!empty($buffer)) {
+                    return $defer->reject(new \Exception($buffer));
+                }
+                return $defer->reject(new \Exception('Process finish with code: ' . $exitCode));
             }
             $defer->resolve($buffer);
         });
         return $defer->promise();
     }
+
 
 
     /**
@@ -245,11 +206,11 @@ class Async
     /**
      * Unwraps a generator and solves yielded promises
      */
-    public static function unwrap_generator(Generator $generator)
+    public static function unwrapGenerator(Generator $generator)
     {
         $value = $generator->current();
         $defer = new Deferred();
-        Promise\resolve($value)
+        static::resolve($value)
             ->then(function ($res) use ($generator, $defer) {
                 $generator->send($res);
                 if ($generator->valid()) {
@@ -267,12 +228,13 @@ class Async
     }
 
 
+
     /**
      * Resolves multiple things:
-     * - Clsoure
+     * - Closure
      * - Generator
      * - Promise
-     * - Stream (TODO)
+     * - Stream
      */
     public static function resolve($gen)
     {
@@ -280,12 +242,15 @@ class Async
             $gen = static::resolve($gen());
         }
         if ($gen instanceof Generator) {
-            return static::unwrap_generator($gen);
+            return static::unwrapGenerator($gen);
         } elseif ($gen instanceof PromiseInterface) {
             return $gen;
+        } elseif ($gen instanceof EventEmitterInterface) {
+            return Stream\buffer($gen);
         }
         return new FulfilledPromise($gen);
     }
+
 
 
     /**
@@ -300,7 +265,7 @@ class Async
             $last = new \Exception('Failed retries');
             while ($retries--) {
                 try {
-                    $res = yield resolve_generator($func);
+                    $res = yield resolve($func);
                     return $res;
                 } catch (\Throwable $e) {
                     yield sleep($loop, $frequency);
@@ -313,8 +278,9 @@ class Async
             }
             throw $last;
         };
-        return resolve_generator($resolver);
+        return resolve($resolver);
     }
+
 
 
     /**
@@ -335,24 +301,38 @@ class Async
             return new RejectedPromise(new \Exception('Async fork failed'));
         } elseif ($pid) {
             // Parent
-            $loop->addPeriodicTimer(0.001, function ($timer) use ($pid, $defer, &$sockets, $loop) {
-                if (pcntl_waitpid(0, $status) != -1) {
+            $buffer = '';
+            $loop->addPeriodicTimer(0.001, function ($timer) use ($pid, $defer, &$sockets, $loop, &$buffer) {
+                while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
+                    $buffer .= $chunk;
+                }
+                $waitpid = pcntl_waitpid($pid, $status, \WNOHANG);
+                if ($waitpid > 0) {
                     $loop->cancelTimer($timer);
                     if (!pcntl_wifexited($status)) {
                         $code = pcntl_wexitstatus($status);
                         $defer->reject(new \Exception('child failed with status: ' . $code));
-                        socket_close($sockets[1]);
-                        socket_close($sockets[0]);
+                        @socket_close($sockets[1]);
+                        @socket_close($sockets[0]);
                         return;
                     }
-                    $buffer = '';
-                    while (($data = socket_recv($sockets[1], $chunk, 8192, MSG_DONTWAIT)) !== false) {
+                    while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
                         $buffer .= $chunk;
                     }
                     $data = unserialize($buffer);
-                    socket_close($sockets[1]);
-                    socket_close($sockets[0]);
                     $defer->resolve($data);
+                    @socket_close($sockets[1]);
+                    @socket_close($sockets[0]);
+                    return;
+                } elseif ($waitpid < 0) {
+                    if (!pcntl_wifexited($status)) {
+                        $code = pcntl_wexitstatus($status);
+                        $defer->reject(new \Exception('child failed with status: ' . $code));
+                        @socket_close($sockets[1]);
+                        @socket_close($sockets[0]);
+                        return;
+                    }
+                    return $defer->reject(new \Exception('child failed with unknown status'));
                 }
             });
             return $defer->promise();
@@ -360,57 +340,32 @@ class Async
             // Child
             $res = call_user_func_array($func, $args);
             $res = serialize($res);
-            if (socket_write($sockets[0], $res, strlen($res)) === false) {
+            $written = socket_write($sockets[0], $res, strlen($res));
+            if ($written === false) {
                 exit(1);
             }
-            socket_close($sockets[0]);
             exit;
         }
     }
 
 
+
     /**
      * Chain Resolve
      */
-    public static function chain_resolve()
+    public static function chainResolve()
     {
-        // Accepts multiple params or an array
         $functions = func_get_args();
-        if (count($functions) == 1 && is_array($functions[0])) {
-            $functions = $functions[0];
+        if (count($functions) == 1 && is_array(current($functions))) {
+            $functions = current($functions);
         }
-        // Prepares the end function
-        $defer = new Deferred();
-        $results = [];
-        $keys = array_keys($functions);
-        // Dummy
-        $prev = function () {
-            return new FulfilledPromise(true);
+        $func = function () use ($functions) {
+            $rows = [];
+            foreach ($functions as $pos => $function) {
+                $rows[$pos] = yield $function;
+            }
+            return $rows;
         };
-        $functions[] = function () use ($defer, &$results, $keys) {
-            $defer->resolve($results);
-        };
-        $key = 0;
-        foreach ($functions as $function) {
-            $prev = function () use ($prev, $function, &$results, $key) {
-                return $prev()
-                    ->then(function () use (&$results, $key, $function) {
-                        $subd = new Deferred();
-                        $function()
-                            ->then(function ($res) use (&$results, $key, $function, $subd) {
-                                $results[ $key ] = $res;
-                                $subd->resolve(true);
-                            })
-                            ->otherwise(function ($e) use (&$results, $key, $function, $subd) {
-                                $results[ $key ] = $e; // ->getMessage();
-                                $subd->resolve(false);
-                            });
-                        return $subd->promise();
-                    });
-            };
-            $key++;
-        }
-        $prev();
-        return $defer->promise();
+        return static::resolve($func());
     }
 }

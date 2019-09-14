@@ -1,2 +1,3 @@
 #!/bin/bash
 vendor/bin/ecs check src --level psr12 --fix
+vendor/bin/ecs check tests --level psr12 --fix

@@ -1,4 +1,5 @@
 <?php
+
 namespace Choval\Async;
 
 use Closure;
@@ -42,7 +43,7 @@ class Async
      */
     public static function getLoop()
     {
-        if(empty(static::$loop)) {
+        if (empty(static::$loop)) {
             throw new \Exception('ReactPHP EventLoop not set');
         }
         return static::$loop;
@@ -55,7 +56,7 @@ class Async
      */
     public static function wait($promise, float $timeout = null)
     {
-        return static::waitWithLoop( static::getLoop(), $promise, $timeout );
+        return static::waitWithLoop(static::getLoop(), $promise, $timeout);
     }
     public static function waitWithLoop(LoopInterface $loop, $promise, float $timeout = null)
     {
@@ -69,7 +70,7 @@ class Async
      */
     public static function sync($promise, float $timeout = null)
     {
-        return static::syncWithLoop( static::getLoop(), $promise, $timeout);
+        return static::syncWithLoop(static::getLoop(), $promise, $timeout);
     }
     public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null)
     {
@@ -103,7 +104,7 @@ class Async
      */
     public static function sleep(float $time)
     {
-        return static::sleepWithLoop( static::getLoop(), $time);
+        return static::sleepWithLoop(static::getLoop(), $time);
     }
     public static function sleepWithLoop(LoopInterface $loop, float $time)
     {
@@ -119,9 +120,9 @@ class Async
     /**
      * Execute
      */
-    public static function execute(string $cmd, float $timeout=0)
+    public static function execute(string $cmd, float $timeout = 0)
     {
-        return static::executeWithLoop( static::getLoop(), $cmd, $timeout);
+        return static::executeWithLoop(static::getLoop(), $cmd, $timeout);
     }
     public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0)
     {
@@ -164,7 +165,7 @@ class Async
                 return $defer->reject($e);
             }
             if (!is_null($termSignal)) {
-                return $defer->reject(new \Exception('Process terminated with code: '.$termSignal, $termSignal));
+                return $defer->reject(new \Exception('Process terminated with code: ' . $termSignal, $termSignal));
             }
             if ($exitCode) {
                 if (!empty($buffer)) {
@@ -182,9 +183,9 @@ class Async
     /**
      * Retry
      */
-    public static function retry($func, int $retries=10, float $frequency=0.1, string $type=null)
+    public static function retry($func, int $retries = 10, float $frequency = 0.1, string $type = null)
     {
-        return static::retryWithLoop( static::getLoop(), $func, $retries, $frequency, $type);
+        return static::retryWithLoop(static::getLoop(), $func, $retries, $frequency, $type);
     }
     public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.1, string $type = null)
     {
@@ -216,9 +217,9 @@ class Async
     /**
      * Async
      */
-    public static function async($func, $args=[])
+    public static function async($func, $args = [])
     {
-        return static::asyncWithLoop( static::getLoop(), $func, $args);
+        return static::asyncWithLoop(static::getLoop(), $func, $args);
     }
     public static function asyncWithLoop(LoopInterface $loop, $func, array $args = [])
     {

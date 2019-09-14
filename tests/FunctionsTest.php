@@ -1,11 +1,11 @@
 <?php
 
+use Choval\Async;
 use PHPUnit\Framework\TestCase;
 use React\EventLoop\Factory;
 use React\Promise;
-use React\Promise\Deferred;
 
-use Choval\Async;
+use React\Promise\Deferred;
 
 class FunctionsTest extends TestCase
 {
@@ -14,7 +14,7 @@ class FunctionsTest extends TestCase
     public static function setUpBeforeClass(): void
     {
         static::$loop = Factory::create();
-        Async\set_loop( static::$loop );
+        Async\set_loop(static::$loop);
     }
 
 

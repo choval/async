@@ -1,4 +1,5 @@
 <?php
+
 namespace Choval\Async;
 
 /**
@@ -16,8 +17,6 @@ use React\Promise;
 use React\Promise\Deferred;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
-
-
 
 /**
  * Sets the loop
@@ -56,11 +55,11 @@ function wait()
 {
     $args = func_get_args();
     $first = current($args);
-    if(!($first instanceof LoopInterface)) {
+    if (!($first instanceof LoopInterface)) {
         $loop = Async::getLoop();
         array_unshift($args, $loop);
     }
-    return call_user_func_array( [Async::class, 'waitWithLoop'], $args );
+    return call_user_func_array([Async::class, 'waitWithLoop'], $args);
 }
 
 
@@ -78,11 +77,11 @@ function sync()
 {
     $args = func_get_args();
     $first = current($args);
-    if(!($first instanceof LoopInterface)) {
+    if (!($first instanceof LoopInterface)) {
         $loop = Async::getLoop();
         array_unshift($args, $loop);
     }
-    return call_user_func_array( [Async::class, 'syncWithLoop'], $args );
+    return call_user_func_array([Async::class, 'syncWithLoop'], $args);
 }
 
 
@@ -99,11 +98,11 @@ function sleep()
 {
     $args = func_get_args();
     $first = current($args);
-    if(!($first instanceof LoopInterface)) {
+    if (!($first instanceof LoopInterface)) {
         $loop = Async::getLoop();
         array_unshift($args, $loop);
     }
-    return call_user_func_array( [Async::class, 'sleepWithLoop'], $args );
+    return call_user_func_array([Async::class, 'sleepWithLoop'], $args);
 }
 
 
@@ -121,11 +120,11 @@ function execute()
 {
     $args = func_get_args();
     $first = current($args);
-    if(!($first instanceof LoopInterface)) {
+    if (!($first instanceof LoopInterface)) {
         $loop = Async::getLoop();
         array_unshift($args, $loop);
     }
-    return call_user_func_array( [Async::class, 'executeWithLoop'], $args );
+    return call_user_func_array([Async::class, 'executeWithLoop'], $args);
 }
 
 
@@ -143,11 +142,11 @@ function async()
 {
     $args = func_get_args();
     $first = current($args);
-    if(!($first instanceof LoopInterface)) {
+    if (!($first instanceof LoopInterface)) {
         $loop = Async::getLoop();
         array_unshift($args, $loop);
     }
-    return call_user_func_array( [Async::class, 'asyncWithLoop'], $args );
+    return call_user_func_array([Async::class, 'asyncWithLoop'], $args);
 }
 
 
@@ -167,11 +166,11 @@ function retry()
 {
     $args = func_get_args();
     $first = current($args);
-    if(!($first instanceof LoopInterface)) {
+    if (!($first instanceof LoopInterface)) {
         $loop = Async::getLoop();
         array_unshift($args, $loop);
     }
-    return call_user_func_array( [Async::class, 'retryWithLoop'], $args );
+    return call_user_func_array([Async::class, 'retryWithLoop'], $args);
 }
 
 

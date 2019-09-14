@@ -2,8 +2,6 @@
 
 namespace Choval\Async;
 
-use Amp;
-
 use Closure;
 use Clue\React\Block;
 use Evenement\EventEmitterInterface;

@@ -234,61 +234,57 @@ class Async
 
 
     /**
-     * Resolve anything, returns a promise
+     * Resolve Generator, for legacy, but actually alias of resolve
      */
-    public static function resolve($gen)
+    public static function resolve_generator($gen)
     {
-        return static::resolve_generator($gen);
+        return static::resolve($gen);
     }
 
 
     /**
-     * Resolve generator
-     * TODO: Stream
+     * Unwraps a generator and solves yielded promises
      */
-    public static function resolve_generator($gen)
+    public static function unwrap_generator(Generator $generator)
     {
-        if ($gen instanceof Generator) {
-            $call = Amp\call(function () use ($gen) {
-                return yield from $gen;
-                /*
-                try {
-                    return yield from $gen;
-                } catch(\Throwable $e) {
-                    return $e;
-                }
-                 */
-            });
-        } elseif ($gen instanceof Closure || is_callable($gen)) {
-            $call = Amp\call(function () use ($gen) {
-                return $gen();
-                /*
-                try {
-                    return $gen();
-                } catch(\Throwable $e) {
-                    return $e;
-                }
-                 */
-            });
-        } else if ($gen instanceof PromiseInterface) {
-            return $gen;
-        } else {
-            return new FulfilledPromise($gen);
-        }
+        $value = $generator->current();
         $defer = new Deferred();
-        $call->onResolve(function ($err, $res) use ($defer) {
-            if ($err) {
-                return $defer->reject($err);
-            }
-            if ($res instanceof Generator || $res instanceof Closure) {
-                $res = resolve_generator($res);
-            }
-            if ($res instanceof \Throwable) {
-                return $defer->reject($res);
-            }
-            return $defer->resolve($res);
-        });
+        Promise\resolve($value)
+            ->then(function ($res) use ($generator, $defer) {
+                $generator->send($res);
+                if ($generator->valid()) {
+                    $final = static::resolve($generator);
+                    return $defer->resolve($final);
+                }
+                $return = $generator->getReturn();
+                $defer->resolve($return);
+            })
+            ->otherwise(function ($e) use ($generator, $defer) {
+                $defer->reject($e);
+                // $generator->throw($e);
+            });
         return $defer->promise();
+    }
+
+
+    /**
+     * Resolves multiple things:
+     * - Clsoure
+     * - Generator
+     * - Promise
+     * - Stream (TODO)
+     */
+    public static function resolve($gen)
+    {
+        if ($gen instanceof Closure || is_callable($gen)) {
+            $gen = static::resolve($gen());
+        }
+        if ($gen instanceof Generator) {
+            return static::unwrap_generator($gen);
+        } elseif ($gen instanceof PromiseInterface) {
+            return $gen;
+        }
+        return new FulfilledPromise($gen);
     }
 
 

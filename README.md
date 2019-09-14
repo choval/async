@@ -10,13 +10,17 @@ composer require choval/async
 
 ## Usage
 
+```
+use Choval\Async;
+```
+
 ### execute
 
 Executes a command, like exec, but async.  
 Returns a promise with the output of the command.
 
 ```php
-execute( $loop, 'echo "Wazza"')
+Async\execute( $loop, 'echo "Wazza"')
   ->then(function($output) {
     // $output contains Wazza
   });
@@ -33,7 +37,7 @@ $ab = function() {
   return 'Wazza';
 };
 
-$out = resolve_generator($ab);
+$out = Async\resolve($ab);
 // $out is a promise that resolves with Wazza
 ```
 
@@ -47,7 +51,7 @@ $ab = function() use ($loop) {
   return implode(' ', $out);
 };
 
-$out = resolve_generator($ab);
+$out = Async\resolve($ab);
 // $out is a promise that resolves with 'hello world'
 ```
 
@@ -64,10 +68,10 @@ $blocking_code = function() {
   return time();
 }
 $promises = [];
-$promises[] = async( $loop, $blocking_code );
-$promises[] = async( $loop, $blocking_code );
-$promises[] = async( $loop, $blocking_code );
-$promises[] = async( $loop, $blocking_code );
+$promises[] = Async\async( $loop, $blocking_code );
+$promises[] = Async\async( $loop, $blocking_code );
+$promises[] = Async\async( $loop, $blocking_code );
+$promises[] = Async\async( $loop, $blocking_code );
 $init = time();
 Promise\all($promises)
   ->then( function($times) use ($init) {
@@ -86,12 +90,12 @@ An async sleep function. This will keep your code async.
 ```php
 $ab = function() use ($loop) {
   $start = time();
-  yield sleep($loop, 2);
+  yield Async\sleep($loop, 2);
   $end = time();
   return $end-$start;
 };
 
-$out = resolve_generator($ab);
+$out = Async\resolve($ab);
 // $out is a promise that resolves with 2
 // +- microsecs
 ```
@@ -100,7 +104,7 @@ $out = resolve_generator($ab);
 
 ```php
 $start = time();
-sleep($loop, 2);
+Async\sleep($loop, 2);
 $end = time();
 
 // $start and $end will have the same time
@@ -109,24 +113,30 @@ $end = time();
 
 As `Choval\Async\sleep` is non-blocking. Check the first `sleep` example for use.
 
-### sync
+### sync (alias: wait)
 
 Makes async code blocking, this is based on Clue's block await, but handles Promises, array of promises as well as Generators.
 Use this for tests and regular blocking scripts where you need to call some async libraries.  
 
+`wait` is an alias of `sync`.
+
 **WARNING: This will make your code BLOCKING (aka NON-ASYNC)!**
 
 ```php
-sync($loop, $generator);
-sync($loop, $promise);
-sync($loop, $promises);
+Async\sync($loop, $generator);
+Async\sync($loop, $promise);
+Async\sync($loop, $promises);
+
+Async\wait($loop, $generator);
+Async\wait($loop, $promise);
+Async\wait($loop, $promises);
 ```
+
 
 ### chain\_resolve
 
 This makes sures promises are resolved one after the other.  
-This was created for non-generator scenarios, but a Generator is much better.  
-Leaving this for legacy code, but check the suggested method.
+Uses a `Generator` and `Async\resolve` to run one after the other.
 
 ```php
 $calls = [];
@@ -135,14 +145,15 @@ $calls[] = function() use ($loop) { execute( $loop, 'echo 2' ); };
 $calls[] = function() use ($loop) { execute( $loop, 'echo 3' ); };
 $calls[] = function() use ($loop) { execute( $loop, 'echo 4' ); };
 
-chain_resolve($calls)
+Async\chain_resolve($calls)
   ->then($ordered) {
     // $ordered is
     // [ 1 , 2 , 3 , 4 ]
   });
 ```
 
-Using a generator and `resolve_generator`
+Or alternatively, using a `Generator` and `Async\resolve`.  
+`Async\chain_resolve` does this for you.
 
 ```php
 $ab = function() use ($loop) {
@@ -154,7 +165,7 @@ $ab = function() use ($loop) {
   return $out;
 };
 
-resolve_generator($ab)
+Async\resolve($ab)
   ->then($ordered) {
     // $ordered is 
     // [ 1 , 2 , 3 , 4 ]
@@ -175,7 +186,7 @@ $func = function() use (&$times) {
   return 'good';
 };
 $retries = 8;
-retry($loop, $func, $retries, 0.1, 'bad error')
+Async\retry($loop, $func, $retries, 0.1, 'bad error')
   ->then(function($res) use (&$retries, &$times) {
     // $res is 'good'
     // $retries is 3

@@ -34,6 +34,24 @@ class FunctionsTest extends TestCase
     }
 
 
+    public function testSyncNotBlockOthersInTheLoop()
+    {
+        $loop = Async\get_loop();
+        $i = 0;
+        $defer = new Deferred();
+        $promise = $defer->promise();
+        $loop->addTimer(1, function() use ($defer) {
+            $defer->resolve(true);
+        });
+        $loop->addPeriodicTimer(0.1, function() use (&$i) {
+            $i++;
+        });
+        $this->assertLessThanOrEqual(1, $i);
+        Async\wait( $promise , 1.2);
+        $this->assertGreaterThanOrEqual(0.8, $i);
+    }
+
+
     /**
      * @depends testSync
      */
@@ -247,6 +265,34 @@ class FunctionsTest extends TestCase
         $vals = [1, 2, 3];
         $res = Async\wait(Async\async($func, $vals));
         $this->assertEquals(array_sum($vals), $res);
+    }
+
+
+
+    public function testAsyncWaitWithBackgroundProcesses()
+    {
+        $loop = Async\get_loop();
+        $i = 0;
+        $defer = new Deferred();
+        $promise = $defer->promise();
+        $loop->addTimer(1, function() use ($defer) {
+            $defer->resolve(true);
+        });
+        $loop->futureTick(function() use (&$i) {
+            $res = Async\wait(
+                Async\async(function() use ($i) {
+                    for($e=0;$e<8;$e++) {
+                        usleep(0.1);
+                        $i++;
+                    }
+                    return $i;
+                })
+            );
+            $i = $res;
+        });
+        $this->assertLessThanOrEqual(1, $i);
+        Async\wait( $promise , 1.2);
+        $this->assertGreaterThanOrEqual(0.8, $i);
     }
 
 

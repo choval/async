@@ -314,7 +314,7 @@ class Async
             })
             ->otherwise(function ($e) use ($generator, $defer) {
                 $defer->reject($e);
-                // $generator->throw($e);
+                $generator->throw($e);
             });
         return $defer->promise();
     }

@@ -85,11 +85,11 @@ class Async
         } elseif (is_array($promise)) {
             $promises = [];
             foreach ($promise as $v) {
-                $promises[] = resolve($v);
+                $promises[] = static::resolve($v);
             }
             $promise = Promise\all($promises);
         } elseif ($promise instanceof Generator || $promise instanceof Closure) {
-            $promise = resolve($promise);
+            $promise = static::resolve($promise);
         }
         if ($promise instanceof PromiseInterface) {
             return Block\await($promise, $loop, $timeout);
@@ -196,7 +196,7 @@ class Async
             $last = new \Exception('Failed retries');
             while ($retries--) {
                 try {
-                    $res = yield resolve($func);
+                    $res = yield static::resolve($func);
                     return $res;
                 } catch (\Throwable $e) {
                     yield sleep($loop, $frequency);
@@ -209,7 +209,7 @@ class Async
             }
             throw $last;
         };
-        return resolve($resolver);
+        return static::resolve($resolver);
     }
 
 

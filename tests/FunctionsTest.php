@@ -310,5 +310,16 @@ class FunctionsTest extends TestCase
         $res = Async\wait(Async\retry($func, $retries));
         $this->assertEquals($id, $res);
         $this->assertEquals(0, $times);
+
+        $times = 5;
+        $retries = 6;
+        $func = function () use (&$times, $id) {
+            if (--$times) {
+                throw new \Exception('bad error');
+            }
+            throw new \Exception('final error');
+        };
+        $this->expectExceptionMessage('final error');
+        $res = Async\wait(Async\retry($func, $retries, 0.1, 'bad error'));
     }
 }

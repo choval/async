@@ -145,20 +145,35 @@ class Async
             });
         }
         $proc->start($loop);
-        $proc->stdout->on('data', function ($chunk) use (&$buffer) {
+        $echo = false;
+        if(!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
+            $echo = true;
+        }
+        $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
             $buffer .= $chunk;
+            if ($echo) {
+                $first = "  [ASYNC EXECUTE]  ";
+                $chunk = trim($chunk);
+                $lines = explode("\n", $chunk);
+                foreach($lines as $line) {
+                    echo $first.$line."\n";
+                }
+            }
         });
         $proc->stdout->on('error', function (\Exception $e) use (&$err) {
             $err = $e;
         });
-        $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err) {
+        $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc) {
+            $proc->stdout->close();
             if ($timer) {
                 $loop->cancelTimer($timer);
             }
             // Clears any hanging processes
+            /*
             $loop->addTimer(1, function () {
                 pcntl_waitpid(-1, $status, \WNOHANG);
             });
+             */
             if ($err) {
                 $msg = $err->getMessage();
                 $e = new \Exception($msg, $termSignal, $err);
@@ -168,10 +183,7 @@ class Async
                 return $defer->reject(new \Exception('Process terminated with code: ' . $termSignal, $termSignal));
             }
             if ($exitCode) {
-                if (!empty($buffer)) {
-                    return $defer->reject(new \Exception($buffer, $exitCode));
-                }
-                return $defer->reject(new \Exception('Process exited with code: ' . $exitCode, $exitCode));
+                return $defer->reject(new \Exception('Process exited with code: ' . $exitCode."\n$buffer", $exitCode));
             }
             $defer->resolve($buffer);
         });
@@ -330,12 +342,17 @@ class Async
      */
     public static function resolve($gen)
     {
-        if ($gen instanceof Closure || is_callable($gen)) {
+        if ($gen instanceof Generator) {
+            try {
+                $gen = static::unwrapGenerator($gen);
+            } catch(\Exception $e) {
+                return new RejectedPromise($e);
+            }
+        }
+        if ($gen instanceof Closure) {
             $gen = static::resolve($gen());
         }
-        if ($gen instanceof Generator) {
-            return static::unwrapGenerator($gen);
-        } elseif ($gen instanceof PromiseInterface) {
+        if ($gen instanceof PromiseInterface) {
             return $gen;
         } elseif ($gen instanceof EventEmitterInterface) {
             return Stream\buffer($gen);

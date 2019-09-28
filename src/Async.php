@@ -74,8 +74,8 @@ class Async
     }
     public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null)
     {
-        if (is_null($timeout)) {
-            $timeout = ini_get('max_execution_time');
+        if (!is_null($timeout)) {
+            $timeout = (int)$timeout;
         }
         if ($timeout <= 0) {
             $timeout = null;

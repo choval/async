@@ -345,7 +345,9 @@ class FunctionsTest extends TestCase
     {
         $id = uniqid();
         $func_a = function() use ($id) {
-            yield Async\sleep(1);
+            yield Async\async(function() {
+              sleep(1);  
+            });
             return $id;
         };
         $func_b = function() use ($func_a) {

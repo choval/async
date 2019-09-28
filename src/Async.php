@@ -75,7 +75,7 @@ class Async
     public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null)
     {
         if (!is_null($timeout)) {
-            $timeout = (int)$timeout;
+            $timeout = (float)$timeout;
         }
         if ($timeout <= 0) {
             $timeout = null;

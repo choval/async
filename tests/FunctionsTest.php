@@ -322,4 +322,39 @@ class FunctionsTest extends TestCase
         $this->expectExceptionMessage('final error');
         $res = Async\wait(Async\retry($func, $retries, 0.1, 'bad error'));
     }
+
+
+    public function testNestingNightmare()
+    {
+        $id = uniqid();
+        $func_a = function() use ($id) {
+            return Async\async(function() use ($id) {
+                usleep(1);
+                return $id;
+            });
+        };
+        $func_b = function() use ($func_a) {
+            return Async\wait($func_a);
+        };
+        $res = Async\wait( Async\resolve($func_b) );
+        $this->assertEquals($id, $res);
+    }
+
+
+    public function testBlockInsidePromise()
+    {
+        $id = uniqid();
+        $func_a = function() use ($id) {
+            yield Async\sleep(1);
+            return $id;
+        };
+        $func_b = function() use ($func_a) {
+            return Async\wait($func_a);
+        };
+        $func_c = function() use ($func_b) {
+            return Async\wait($func_b);
+        };
+        $res = Async\wait( $func_c );
+        $this->assertEquals($id, $res);
+    }
 }

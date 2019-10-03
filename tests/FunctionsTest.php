@@ -324,6 +324,40 @@ class FunctionsTest extends TestCase
     }
 
 
+    /*
+    public function testRetryStress()
+    {
+        $times = 1000;
+        $id = uniqid();
+        $func = function () use (&$times, $id) {
+            if (--$times) {
+                throw new \Exception('bad error');
+            }
+            return $id;
+        };
+        $retries = $times+1;
+        $res = Async\wait( Async\retry($func, $retries, 0.001) , 10 );
+        $this->assertEquals($id, $res);
+        $this->assertEquals(0, $times);
+
+        $times = 1000;
+        $id = uniqid();
+        $func = function () use (&$times, $id) {
+            return Async\async(function() use (&$times, $id) {
+                if (--$times) {
+                    throw new \Exception('bad error');
+                }
+                return $id;
+            });
+        };
+        $retries = $times+1;
+        $res = Async\wait( Async\retry($func, $retries, 0.001) , 10);
+        $this->assertEquals($id, $res);
+        $this->assertEquals(0, $times);
+    }
+     */
+
+
     public function testNestingNightmare()
     {
         $id = uniqid();

@@ -198,7 +198,7 @@ function resolve($gen)
  */
 function resolve_generator($gen)
 {
-    return Async::resolveGenerator($gen);
+    return Async::resolve($gen);
 }
 
 

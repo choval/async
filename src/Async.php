@@ -353,8 +353,17 @@ class Async
             $gen = static::resolve($gen());
         }
         if ($gen instanceof PromiseInterface) {
-            return $gen;
-        } elseif ($gen instanceof EventEmitterInterface) {
+            $defer = new Deferred();
+            $gen
+                ->then(function($res) use ($defer) {
+                    $defer->resolve( static::resolve( $res ) );
+                })
+                ->otherwise(function($e) use ($defer) {
+                    $defer->reject($e);
+                });
+            return $defer->promise();
+        }
+        if ($gen instanceof React\Stream\ReadableStreamInterface) {
             return Stream\buffer($gen);
         }
         return new FulfilledPromise($gen);

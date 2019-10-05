@@ -25,45 +25,6 @@ final class Async
     private static $forks_limit = 50;
 
 
-    /**
-     * From: https://gist.github.com/nh-mike/fde9f69a57bc45c5b491d90fb2ee08df
-     */
-    static function flattenExceptionBacktrace(\Throwable $exception) {
-        if ($exception instanceof \Exception) {
-            $traceProperty = (new \ReflectionClass('Exception'))->getProperty('trace');
-        } else {
-            $traceProperty = (new \ReflectionClass('Error'))->getProperty('trace');
-        }
-        $traceProperty->setAccessible(true);
-        $flatten = function(&$value, $key) {
-            if ($value instanceof \Closure) {
-                $closureReflection = new \ReflectionFunction($value);
-                $value = sprintf(
-                    '(Closure at %s:%s)',
-                    $closureReflection->getFileName(),
-                    $closureReflection->getStartLine()
-                );
-            } elseif (is_object($value)) {
-                $value = sprintf('object(%s)', get_class($value));
-            } elseif (is_resource($value)) {
-                $value = sprintf('resource(%s)', get_resource_type($value));
-            }
-        };
-        $previousexception = $exception;
-        do {
-            if ($previousexception === NULL) {
-                break;
-            }
-            $exception = $previousexception;
-            $trace = $traceProperty->getValue($exception);
-            foreach($trace as &$call) {
-                array_walk_recursive($call['args'], $flatten);
-            }
-            $traceProperty->setValue($exception, $trace);
-        } while($previousexception = $exception->getPrevious());
-        $traceProperty->setAccessible(false);
-    }
-
 
     /**
      *
@@ -73,6 +34,30 @@ final class Async
     public static function setLoop(LoopInterface $loop)
     {
         static::$loop = $loop;
+    }
+
+
+
+    /**
+     *
+     * Sets the limit of simultaneous async forks
+     *
+     */
+    public static function setForksLimit(int $limit)
+    {
+        static::$forks_limit = $limit;
+    }
+
+
+
+    /**
+     *
+     * Gets the limit of async forks
+     *
+     */
+    public static function getForksLimit()
+    {
+        return static::$forks_limit;
     }
 
 
@@ -297,7 +282,7 @@ final class Async
         $defer = new Deferred();
         static::resolve(function() use($loop) {
             while (static::$forks >= static::$forks_limit) {
-                yield static::sleepWithLoop($loop, 1);
+                yield static::sleepWithLoop($loop, 0.1);
             }
             return true;
         })
@@ -468,5 +453,46 @@ final class Async
             return $rows;
         };
         return static::resolve($func());
+    }
+
+
+
+    /**
+     * From: https://gist.github.com/nh-mike/fde9f69a57bc45c5b491d90fb2ee08df
+     */
+    static function flattenExceptionBacktrace(\Throwable $exception) {
+        if ($exception instanceof \Exception) {
+            $traceProperty = (new \ReflectionClass('Exception'))->getProperty('trace');
+        } else {
+            $traceProperty = (new \ReflectionClass('Error'))->getProperty('trace');
+        }
+        $traceProperty->setAccessible(true);
+        $flatten = function(&$value, $key) {
+            if ($value instanceof \Closure) {
+                $closureReflection = new \ReflectionFunction($value);
+                $value = sprintf(
+                    '(Closure at %s:%s)',
+                    $closureReflection->getFileName(),
+                    $closureReflection->getStartLine()
+                );
+            } elseif (is_object($value)) {
+                $value = sprintf('object(%s)', get_class($value));
+            } elseif (is_resource($value)) {
+                $value = sprintf('resource(%s)', get_resource_type($value));
+            }
+        };
+        $previousexception = $exception;
+        do {
+            if ($previousexception === NULL) {
+                break;
+            }
+            $exception = $previousexception;
+            $trace = $traceProperty->getValue($exception);
+            foreach($trace as &$call) {
+                array_walk_recursive($call['args'], $flatten);
+            }
+            $traceProperty->setValue($exception, $trace);
+        } while($previousexception = $exception->getPrevious());
+        $traceProperty->setAccessible(false);
     }
 }

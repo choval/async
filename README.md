@@ -73,17 +73,20 @@ $out = Async\resolve($ab);
 This can also be used to make blocking code run asynchronously.  
 Creates a fork in the background.
 
+Arguments can be passed in an array (`call_user_func_array`).
+
 
 ```php
-$blocking_code = function() {
-  \sleep(1);
+$blocking_code = function($secs) {
+  \sleep($secs);
   return time();
 }
+$secs = 1;
 $promises = [];
-$promises[] = Async\async( $blocking_code );
-$promises[] = Async\async( $blocking_code );
-$promises[] = Async\async( $blocking_code );
-$promises[] = Async\async( $blocking_code );
+$promises[] = Async\async( $blocking_code , [$secs]);
+$promises[] = Async\async( $blocking_code , [$secs]);
+$promises[] = Async\async( $blocking_code , [$secs]);
+$promises[] = Async\async( $blocking_code , [$secs]);
 $init = time();
 Promise\all($promises)
   ->then( function($times) use ($init) {
@@ -94,6 +97,18 @@ Promise\all($promises)
     // All times will be equal, and larger than init by 1 sec.
   });
 ```
+
+There's a limit of 50 simultaneously running async forks.
+This limit can be changed by calling `Async\setForksLimit`.
+
+```php
+Async\set_forks_limit(100);
+echo Async\get_forks_limit(); // 100
+```
+
+When the limit is reached, the code will wait for a previous
+fork to finish before running, keeping a max of async forks
+at the set forks limit (100msec between checks).
 
 
 ### sleep

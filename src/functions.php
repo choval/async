@@ -43,6 +43,30 @@ function get_loop()
 
 
 /**
+ * Sets the forking limit for async
+ *
+ * @param int $limit
+ */
+function set_forks_limit(int $limit)
+{
+    return Async::setForksLimit($limit);
+}
+
+
+
+/**
+ * Gets the forking limit for async
+ *
+ * @return int
+ */
+function get_forks_limit()
+{
+    return Async::getForksLimit();
+}
+
+
+
+/**
  * Wait for a promise (makes code synchronous) or stream (buffers)
  *
  * @param LoopInterface $loop (optional)

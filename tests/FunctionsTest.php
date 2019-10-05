@@ -246,13 +246,35 @@ class FunctionsTest extends TestCase
 
     public function testAsyncEcho()
     {
-        $func = function () {
-            $msg = "Hello world";
-            $this->expectOutputString($msg);
-            echo $msg;
+        $msg = "Hello world";
+        $func = function ($msg) {
+            return $msg;
         };
-        $test = Async\wait(Async\async($func));
-        $this->assertTrue(true);
+        $test = Async\wait(Async\async($func, [$msg]));
+        $this->assertEquals($msg, $test);
+    }
+
+
+
+    public function testAsyncStress()
+    {
+        $factor = 3;
+        $limit = Async\get_forks_limit();
+        $limit *= $factor;
+        $func = function ($i) {
+            \usleep(0.1);
+            return $i;
+        };
+        $promises = [];
+        for($i=0;$i<$limit;$i++) {
+            $promises[] = Async\async($func, [$i]);
+        }
+        $start = microtime(true);
+        $res = Async\wait( $promises );
+        $end = microtime(true);
+        $diff = $end-$start;
+        $this->assertLessThanOrEqual( ($limit/$factor) , $diff);
+        $this->assertEquals($limit, count($res));
     }
 
 

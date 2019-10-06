@@ -1,6 +1,17 @@
 # Choval\Async
 
-A few functions to ease the use of Async..
+A collection of functions for programming in [ReactPHP](https://reactphp.org).
+
+* [Install](#install)
+* [Usage](#usage)
+  * [execute](#execute)
+  * [resolve](#resolve)
+  * [async](#async)
+  * [sleep](#sleep)
+  * [wait](#wait)
+  * [chain_resolve](#chain_resolve)
+  * [retry](#retry)
+* [License](#license)
 
 ## Install
 
@@ -18,7 +29,7 @@ Async\set_loop($loop);
 ```
 
 If the loop is not set, all calls except `resolve` and `chain_resolve`  
-need a `LoopInterface` as the first parameter.
+need a [`LoopInterface`](https://github.com/reactphp/event-loop) as the first parameter.
 
 ### execute
 
@@ -40,7 +51,7 @@ Async\execute('echo "Wazza"')
 
 ### resolve
 
-Resolves a `Generator` or `Closure`.
+Resolves a `Generator` or `Closure`. Allows using `yield` all over as `await`.
 
 ```php
 $ab = function() {
@@ -66,7 +77,6 @@ $ab = function() {
 $out = Async\resolve($ab);
 // $out is a promise that resolves with 'hello world'
 ```
-
 
 ### async
 
@@ -141,7 +151,9 @@ $end = time();
 // +- microsecs
 ```
 
-### wait (or sync)
+### wait
+
+(aka sync)
 
 Makes async code blocking, this is based on Clue's block await.  
 Handles `Generator`, `Closure`, `Promise`, `Buffer` and `array` of `Promise`.  

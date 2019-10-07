@@ -118,7 +118,7 @@ final class Async
         else {
             $promise = static::resolve($promise);
         }
-        if ($promise instanceof PromiseInterface) {
+        if (is_a($promise, PromiseInterface::class)) {
             return Block\await($promise, $loop, $timeout);
         }
         return $promise;
@@ -518,14 +518,14 @@ final class Async
      * From: https://gist.github.com/nh-mike/fde9f69a57bc45c5b491d90fb2ee08df
      */
     static function flattenExceptionBacktrace(\Throwable $exception) {
-        if ($exception instanceof \Exception) {
+        if (is_a($exception, \Exception::class)) {
             $traceProperty = (new \ReflectionClass('Exception'))->getProperty('trace');
         } else {
             $traceProperty = (new \ReflectionClass('Error'))->getProperty('trace');
         }
         $traceProperty->setAccessible(true);
         $flatten = function(&$value, $key) {
-            if ($value instanceof \Closure) {
+            if (is_a($value, Closure::class)) {
                 $closureReflection = new \ReflectionFunction($value);
                 $value = sprintf(
                     '(Closure at %s:%s)',

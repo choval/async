@@ -228,6 +228,20 @@ function resolve_generator($gen)
 
 
 /**
+ * Buffers a stream and returns a promise
+ *
+ * @param ReadableStreamInterface $stream
+ * @param int $maxLength=null
+ *
+ * @return Promise
+ */
+function buffer(ReadableStreamInterface $stream, $maxLength = null)
+{
+    return Async::buffer($stream, $maxLength);
+}
+
+
+/**
  *
  * Run promises one after the other
  * Chained... Returns a promise too

@@ -18,6 +18,8 @@ use React\Promise\PromiseInterface;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
 
+use React\Stream\ReadableStreamInterface;
+
 final class Async
 {
     private static $loop;
@@ -70,7 +72,7 @@ final class Async
     public static function getLoop()
     {
         if (empty(static::$loop)) {
-            throw new \Exception('ReactPHP EventLoop not set');
+            throw new \RuntimeException('ReactPHP EventLoop not set');
         }
         return static::$loop;
     }
@@ -166,7 +168,7 @@ final class Async
                     $pipe->close();
                 }
                 $proc->terminate(\SIGKILL ?? 9);
-                $err = new \Exception('Process timed out');
+                $err = new \RuntimeException('Process timed out');
             });
         }
         $proc->start($loop);
@@ -201,14 +203,14 @@ final class Async
              */
             if ($err) {
                 $msg = $err->getMessage();
-                $e = new \Exception($msg, $termSignal, $err);
+                $e = new \RuntimeException($msg, $termSignal, $err);
                 return $defer->reject($e);
             }
             if (!is_null($termSignal)) {
-                return $defer->reject(new \Exception('Process terminated with code: ' . $termSignal, $termSignal));
+                return $defer->reject(new \RuntimeException('Process terminated with code: ' . $termSignal, $termSignal));
             }
             if ($exitCode) {
-                return $defer->reject(new \Exception('Process exited with code: ' . $exitCode."\n$buffer", $exitCode));
+                return $defer->reject(new \RuntimeException('Process exited with code: ' . $exitCode."\n$buffer", $exitCode));
             }
             $defer->resolve($buffer);
         });
@@ -241,7 +243,7 @@ final class Async
                 $promise = $promises[ $i-1 ];
             }
             if ($i >= $retries) {
-                $defer->reject( new \Exception('Failed retries') );
+                $defer->reject( new \RuntimeException('Failed retries') );
                 $loop->cancelTimer($timer);
                 return;
             }
@@ -290,13 +292,13 @@ final class Async
             $sockets = array();
             $domain = (strtoupper(substr(PHP_OS, 0, 3)) == 'WIN' ? AF_INET : AF_UNIX);
             if (socket_create_pair($domain, SOCK_STREAM, 0, $sockets) === false) {
-                return new RejectedPromise(new \Exception('socket_create_pair failed: ' . socket_strerror(socket_last_error())));
+                return new RejectedPromise(new \RuntimeException('socket_create_pair failed: ' . socket_strerror(socket_last_error())));
             }
 
             $pid = pcntl_fork();
             if ($pid == -1) {
                 static::$forks--;
-                return new RejectedPromise(new \Exception('Async fork failed'));
+                return new RejectedPromise(new \RuntimeException('Async fork failed'));
             } elseif ($pid) {
                 // Parent
                 $buffer = '';
@@ -310,7 +312,7 @@ final class Async
                         $loop->cancelTimer($timer);
                         if (!pcntl_wifexited($status)) {
                             $code = pcntl_wexitstatus($status);
-                            $defer->reject(new \Exception('child exited with status: ' . $code));
+                            $defer->reject(new \RuntimeException('child exited with status: ' . $code));
                             @socket_close($sockets[1]);
                             @socket_close($sockets[0]);
                             return;
@@ -331,12 +333,12 @@ final class Async
                         static::$forks--;
                         if (!pcntl_wifexited($status)) {
                             $code = pcntl_wexitstatus($status);
-                            $defer->reject(new \Exception('child errored with status: ' . $code));
+                            $defer->reject(new \RuntimeException('child errored with status: ' . $code));
                             @socket_close($sockets[1]);
                             @socket_close($sockets[0]);
                             return;
                         }
-                        return $defer->reject(new \Exception('child failed with unknown status'));
+                        return $defer->reject(new \RuntimeException('child failed with unknown status'));
                     }
                 });
             } else {
@@ -394,6 +396,62 @@ final class Async
 
 
     /**
+     *
+     * Unwraps a stream
+     * This is based on promise-stream, but allows handling non-strings
+     * https://github.com/reactphp/promise-stream/blob/master/src/functions.php
+     *
+     */
+    public static function buffer(ReadableStreamInterface $stream, $maxLength = null)
+    {
+        // Return null if stream is closed
+        if (!$stream->isReadable()) {
+            return Promise\resolve();
+        }
+        $buffer = [];
+        $bufferer;
+        $size = 0;
+        $type = 'array';
+        $promise = new Promise\Promise(function ($resolve, $reject) use ($stream, $maxLength, &$buffer, &$bufferer, &$size, &$type) {
+            $bufferer = function ($data) use (&$buffer, $reject, $maxLength, &$size, &$type) {
+                $buffer[] = $data;
+                if (is_string($data)) {
+                    $type = 'string';
+                    $size += strlen($data);
+                } else {
+                    $size++;
+                }
+                if ($maxLength !== null && $size > $maxLength) {
+                    $reject(new \OverflowException('Buffer exceeded maximum length'));
+                }
+            };
+            $stream->on('data', $bufferer);
+            $stream->on('error', function ($error) use ($reject) {
+                $reject(new \RuntimeException('An error occured on the underlying stream while buffering', 0, $error));
+            });
+
+            $stream->on('close', function () use ($resolve, &$buffer, &$type) {
+                if ($type == 'string') {
+                    return $resolve( implode('', $buffer) );
+                }
+                $resolve($buffer);
+            });
+        }, function ($_, $reject) {
+            $reject(new \RuntimeException('Cancelled buffering'));
+        });
+
+        return $promise->then(null, function ($error) use (&$buffer, &$bufferer, $stream, $type) {
+            // promise rejected => clear buffer and buffering
+            $buffer = [];
+            $stream->removeListener('data', $bufferer);
+            throw $error;
+        });
+    }
+
+
+
+
+    /**
      * Resolves multiple things:
      * - Closure
      * - Generator
@@ -402,21 +460,21 @@ final class Async
      */
     public static function resolve($gen)
     {
-        if ($gen instanceof Generator) {
+        if (is_a($gen, Generator::class)) {
             try {
                 $gen = static::unwrapGenerator($gen);
             } catch(\Exception $e) {
                 return new RejectedPromise($e);
             }
         }
-        if ($gen instanceof Closure) {
+        if (is_a($gen, Closure::class)) {
             try {
                 $gen = static::resolve($gen());
             } catch(\Exception $e) {
                 return new RejectedPromise($e);
             }
         }
-        if ($gen instanceof PromiseInterface) {
+        if (is_a($gen, PromiseInterface::class)) {
             $defer = new Deferred();
             $gen
                 ->then(function($res) use ($defer) {
@@ -427,8 +485,8 @@ final class Async
                 });
             return $defer->promise();
         }
-        if ($gen instanceof React\Stream\ReadableStreamInterface) {
-            return Stream\buffer($gen);
+        if (is_a($gen, ReadableStreamInterface::class)) {
+            return static::buffer($gen);
         }
         return new FulfilledPromise($gen);
     }

@@ -106,15 +106,14 @@ final class Async
         if ($timeout <= 0) {
             $timeout = null;
         }
-        if ($promise instanceof EventEmitterInterface) {
-            $promise = Stream\buffer($promise);
-        } elseif (is_array($promise)) {
+        if (is_array($promise)) {
             $promises = [];
             foreach ($promise as $v) {
                 $promises[] = static::resolve($v);
             }
             $promise = Promise\all($promises);
-        } elseif ($promise instanceof Generator || $promise instanceof Closure) {
+        }
+        else {
             $promise = static::resolve($promise);
         }
         if ($promise instanceof PromiseInterface) {

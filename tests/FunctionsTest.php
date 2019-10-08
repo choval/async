@@ -40,7 +40,7 @@ class FunctionsTest extends TestCase
         $i = 0;
         $defer = new Deferred();
         $promise = $defer->promise();
-        $loop->addTimer(1, function() use ($defer) {
+        $loop->addTimer(0.5, function() use ($defer) {
             $defer->resolve(true);
         });
         $loop->addPeriodicTimer(0.1, function() use (&$i) {
@@ -48,7 +48,7 @@ class FunctionsTest extends TestCase
         });
         $this->assertLessThanOrEqual(1, $i);
         Async\wait( $promise , 1.2);
-        $this->assertGreaterThanOrEqual(0.8, $i);
+        $this->assertGreaterThanOrEqual(1, $i);
     }
 
 

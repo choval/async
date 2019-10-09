@@ -293,14 +293,17 @@ final class Async
     /**
      * Retry
      */
-    public static function retry($func, int $retries = 10, float $frequency = 0.1, string $type = null)
+    public static function retry($func, int $retries = 10, float $frequency = 0.1, $type = null)
     {
         return static::retryWithLoop(static::getLoop(), $func, $retries, $frequency, $type);
     }
-    public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.1, string $type = null)
+    public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.1, $type = null)
     {
         if (is_null($type)) {
             $type = \Exception::class;
+        }
+        if (!is_array($type)) {
+            $type = [$type];
         }
         $defer = new Deferred();
         $i = $retries;
@@ -322,7 +325,13 @@ final class Async
                     ->otherwise(function($e) use (&$last_e, $defer, $type, $loop, $timer) {
                         $last_e = $e;
                         $msg = $e->getMessage();
-                        if ($type != $msg && !is_a($e, $type)) {
+                        $ignore = false;
+                        foreach($type as $tmp) {
+                            if ($tmp == $msg || is_a($e, $tmp)) {
+                                $ignore = true;
+                            }
+                        }
+                        if (!$ignore) {
                             $defer->reject($e);
                             $loop->cancelTimer($timer);
                         }

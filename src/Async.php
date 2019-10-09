@@ -23,8 +23,8 @@ use React\Stream\ReadableStreamInterface;
 final class Async
 {
     private static $loop;
-    private static $forks = 0;
-    private static $forks_limit = 50;
+    private static $forks = [];
+    private static $forks_limit;
 
 
 
@@ -59,7 +59,61 @@ final class Async
      */
     public static function getForksLimit()
     {
+        if (empty(static::$forks_limit)) {
+            static::$forks_limit = 20;
+            // TODO: Calculate the max number of forks
+        }
         return static::$forks_limit;
+    }
+
+
+
+    /**
+     *
+     * Add a fork
+     *
+     */
+    public static function addFork(string $id, PromiseInterface $promise)
+    {
+        static::$forks[$id] = $promise;
+        $promise->always(function() use ($id) {
+            unset( static::$forks[$id] );
+        });
+    }
+
+
+
+    /**
+     *
+     * Remove a fork
+     *
+     */
+    public static function removeFork($id)
+    {
+        $promise = static::$forks[$id] ?? false;
+        if ($promise) {
+            $promise->cancel();
+            unset(static::$forks[$id]);
+        }
+    }
+
+
+
+    /**
+     *
+     * Wait free fork
+     *
+     */
+    public static function waitFreeFork(LoopInterface $loop)
+    {
+        $limit = static::getForksLimit();
+        return static::resolve(function() use ($limit, $loop) {
+            $count = count( static::$forks );
+            while( count(static::$forks) >= $limit ) {
+                yield static::sleepWithLoop($loop, 0.001);
+            }
+            return true;
+        });
     }
 
 
@@ -119,7 +173,15 @@ final class Async
             $promise = static::resolve($promise);
         }
         if (is_a($promise, PromiseInterface::class)) {
-            return Block\await($promise, $loop, $timeout);
+            try {
+                return Block\await($promise, $loop, $timeout);
+            } catch(\Throwable $e) {
+                if (is_a($e, \UnexpectedValueException::class)) {
+                    $prev = $e->getPrevious();
+                    throw $prev;
+                }
+                throw $e;
+            }
         }
         return $promise;
     }
@@ -136,7 +198,7 @@ final class Async
     public static function sleepWithLoop(LoopInterface $loop, float $time)
     {
         $defer = new Deferred();
-        $loop->addTimer($time, function () use ($defer, $time) {
+        $loop->addTimer($time, function ($timer) use ($defer, $time) {
             $defer->resolve($time);
         });
         return $defer->promise();
@@ -157,63 +219,72 @@ final class Async
             $timeout = ini_get('max_execution_time');
         }
         $defer = new Deferred();
-        $buffer = '';
-        $proc = new Process($cmd);
-        $timer = false;
-        $err;
-        if ($timeout > 0) {
-            $timer = $loop->addTimer($timeout, function () use ($proc, &$err) {
-                $proc->stdin->end();
-                foreach ($proc->pipes as $pipe) {
-                    $pipe->close();
+        $id = random_bytes(16);
+        static::waitFreeFork($loop)
+            ->then(function() use ($loop, $cmd, $timeout, $defer, $id) {
+                static::addFork($id, $defer->promise());
+                $buffer = '';
+                $proc = new Process($cmd);
+                $timer = false;
+                $err;
+                if ($timeout > 0) {
+                    $timer = $loop->addTimer($timeout, function () use ($proc, &$err) {
+                        $proc->stdin->end();
+                        foreach ($proc->pipes as $pipe) {
+                            $pipe->close();
+                        }
+                        $proc->terminate(\SIGKILL ?? 9);
+                        $err = new \RuntimeException('Process timed out');
+                    });
                 }
-                $proc->terminate(\SIGKILL ?? 9);
-                $err = new \RuntimeException('Process timed out');
-            });
-        }
-        $proc->start($loop);
-        $echo = false;
-        if(!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
-            $echo = true;
-        }
-        $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
-            $buffer .= $chunk;
-            if ($echo) {
-                $first = "  [ASYNC EXECUTE]  ";
-                $chunk = trim($chunk);
-                $lines = explode("\n", $chunk);
-                foreach($lines as $line) {
-                    echo $first.$line."\n";
+                $proc->start($loop);
+                $echo = false;
+                if(!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
+                    $echo = true;
                 }
-            }
-        });
-        $proc->stdout->on('error', function (\Exception $e) use (&$err) {
-            $err = $e;
-        });
-        $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc) {
-            $proc->stdout->close();
-            if ($timer) {
-                $loop->cancelTimer($timer);
-            }
-            // Clears any hanging processes
-            /*
-            $loop->addTimer(1, function () {
-                pcntl_waitpid(-1, $status, \WNOHANG);
+                $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
+                    $buffer .= $chunk;
+                    if ($echo) {
+                        $first = "  [ASYNC EXECUTE]  ";
+                        $chunk = trim($chunk);
+                        $lines = explode("\n", $chunk);
+                        foreach($lines as $line) {
+                            echo $first.$line."\n";
+                        }
+                    }
+                });
+                $proc->stdout->on('error', function (\Exception $e) use (&$err) {
+                    $err = $e;
+                });
+                $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc, $id) {
+                    static::removeFork($id);
+                    $proc->stdout->close();
+                    if ($timer) {
+                        $loop->cancelTimer($timer);
+                    }
+                    // Clears any hanging processes
+                    /*
+                    $loop->addTimer(1, function () {
+                        pcntl_waitpid(-1, $status, \WNOHANG);
+                    });
+                     */
+                    if ($err) {
+                        $msg = $err->getMessage();
+                        $e = new \RuntimeException($msg, $termSignal, $err);
+                        return $defer->reject($e);
+                    }
+                    if (!is_null($termSignal)) {
+                        return $defer->reject(new \RuntimeException('Process terminated with code: ' . $termSignal, $termSignal));
+                    }
+                    if ($exitCode) {
+                        return $defer->reject(new \RuntimeException('Process exited with code: ' . $exitCode."\n$buffer", $exitCode));
+                    }
+                    $defer->resolve($buffer);
+                });
+            })
+            ->otherwise(function($e) use ($defer) {
+                $defer->reject($e);
             });
-             */
-            if ($err) {
-                $msg = $err->getMessage();
-                $e = new \RuntimeException($msg, $termSignal, $err);
-                return $defer->reject($e);
-            }
-            if (!is_null($termSignal)) {
-                return $defer->reject(new \RuntimeException('Process terminated with code: ' . $termSignal, $termSignal));
-            }
-            if ($exitCode) {
-                return $defer->reject(new \RuntimeException('Process exited with code: ' . $exitCode."\n$buffer", $exitCode));
-            }
-            $defer->resolve($buffer);
-        });
         return $defer->promise();
     }
 
@@ -232,39 +303,34 @@ final class Async
             $type = \Exception::class;
         }
         $defer = new Deferred();
-        $promises = [];
-        $i = 0;
-        $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($loop, &$retries, $func, $type, $defer, &$promises, &$i) {
-            $def = new Deferred();
-            $promises[$i] = $def->promise();
-            if ($i == 0) {
-                $promise = new FulfilledPromise(0);
+        $i = $retries;
+        $last_e = new \RuntimeException('Failed retries');
+        $running = false;
+        $loop->addPeriodicTimer($frequency, function($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type) {
+            if ($i >= 0) {
+                $i--;
             } else {
-                $promise = $promises[ $i-1 ];
-            }
-            if ($i >= $retries) {
-                $defer->reject( new \RuntimeException('Failed retries') );
                 $loop->cancelTimer($timer);
-                return;
+                return $defer->reject($last_e);
             }
-            $i++;
-            $promise
-                ->then(function($res) use ($func) {
-                    return static::resolve($func);
-                })
-                ->then(function($res) use ($defer, $timer, $loop, $def) {
-                    $def->resolve(true);
-                    $defer->resolve($res);
-                    $loop->cancelTimer($timer);
-                })
-                ->otherwise(function($e) use ($defer, $timer, $loop, $type, $def) {
-                    $def->resolve(true);
-                    $msg = $e->getMessage();
-                    if ($msg != $type && !(is_a($e,$type))) {
-                        $defer->reject($e);
-                        $loop->cancelTimer($timer);
-                    }
-                });
+            if (!$running) {
+                $running = true;
+                static::resolve($func)
+                    ->then(function($res) use ($defer) {
+                        $defer->resolve($res);
+                    })
+                    ->otherwise(function($e) use (&$last_e, $defer, $type, $loop, $timer) {
+                        $last_e = $e;
+                        $msg = $e->getMessage();
+                        if ($type != $msg && !is_a($e, $type)) {
+                            $defer->reject($e);
+                            $loop->cancelTimer($timer);
+                        }
+                    })
+                    ->always(function() use (&$running) {
+                        $running = false;
+                    });
+            }
         });
         return $defer->promise();
     }
@@ -281,89 +347,85 @@ final class Async
     public static function asyncWithLoop(LoopInterface $loop, $func, array $args = [])
     {
         $defer = new Deferred();
-        static::resolve(function() use($loop) {
-            while (static::$forks >= static::$forks_limit) {
-                yield static::sleepWithLoop($loop, 0.1);
-            }
-            return true;
-        })
-        ->then(function() use ($loop, $func, $args, $defer) {
-            static::$forks++;
-            $sockets = array();
-            $domain = (strtoupper(substr(PHP_OS, 0, 3)) == 'WIN' ? AF_INET : AF_UNIX);
-            if (socket_create_pair($domain, SOCK_STREAM, 0, $sockets) === false) {
-                return new RejectedPromise(new \RuntimeException('socket_create_pair failed: ' . socket_strerror(socket_last_error())));
-            }
+        $id = random_bytes(16);
+        static::waitFreeFork($loop)
+            ->then(function() use ($loop, $func, $args, $defer, $id) {
+                static::addFork($id, $defer->promise());
+                $sockets = array();
+                $domain = (strtoupper(substr(PHP_OS, 0, 3)) == 'WIN' ? AF_INET : AF_UNIX);
+                if (socket_create_pair($domain, SOCK_STREAM, 0, $sockets) === false) {
+                    return new RejectedPromise(new \RuntimeException('socket_create_pair failed: ' . socket_strerror(socket_last_error())));
+                }
 
-            $pid = pcntl_fork();
-            if ($pid == -1) {
-                static::$forks--;
-                return new RejectedPromise(new \RuntimeException('Async fork failed'));
-            } elseif ($pid) {
-                // Parent
-                $buffer = '';
-                $loop->addPeriodicTimer(0.001, function ($timer) use ($pid, $defer, &$sockets, $loop, &$buffer) {
-                    while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
-                        $buffer .= $chunk;
-                    }
-                    $waitpid = pcntl_waitpid($pid, $status, \WNOHANG);
-                    if ($waitpid > 0) {
-                        static::$forks--;
-                        $loop->cancelTimer($timer);
-                        if (!pcntl_wifexited($status)) {
-                            $code = pcntl_wexitstatus($status);
-                            $defer->reject(new \RuntimeException('child exited with status: ' . $code));
-                            @socket_close($sockets[1]);
-                            @socket_close($sockets[0]);
-                            return;
-                        }
+                $pid = pcntl_fork();
+                if ($pid == -1) {
+                    static::removeFork($id);
+                    return new RejectedPromise(new \RuntimeException('Async fork failed'));
+                } elseif ($pid) {
+                    // Parent
+                    $buffer = '';
+                    $loop->addPeriodicTimer(0.001, function ($timer) use ($pid, $defer, &$sockets, $loop, &$buffer, $id) {
                         while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
                             $buffer .= $chunk;
                         }
-                        $data = unserialize($buffer);
-                        if (is_a($data, \Exception::class)) {
-                            $defer->reject($data);
-                        } else {
-                            $defer->resolve($data);
-                        }
-                        @socket_close($sockets[1]);
-                        @socket_close($sockets[0]);
-                        return;
-                    } elseif ($waitpid < 0) {
-                        static::$forks--;
-                        if (!pcntl_wifexited($status)) {
-                            $code = pcntl_wexitstatus($status);
-                            $defer->reject(new \RuntimeException('child errored with status: ' . $code));
+                        $waitpid = pcntl_waitpid($pid, $status, \WNOHANG);
+                        if ($waitpid > 0) {
+                            static::removeFork($id);
+                            $loop->cancelTimer($timer);
+                            if (!pcntl_wifexited($status)) {
+                                $code = pcntl_wexitstatus($status);
+                                $defer->reject(new \RuntimeException('child exited with status: ' . $code));
+                                @socket_close($sockets[1]);
+                                @socket_close($sockets[0]);
+                                return;
+                            }
+                            while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
+                                $buffer .= $chunk;
+                            }
+                            $data = unserialize($buffer);
+                            if (is_a($data, \Exception::class)) {
+                                $defer->reject($data);
+                            } else {
+                                $defer->resolve($data);
+                            }
                             @socket_close($sockets[1]);
                             @socket_close($sockets[0]);
                             return;
+                        } elseif ($waitpid < 0) {
+                            static::removeFork($id);
+                            if (!pcntl_wifexited($status)) {
+                                $code = pcntl_wexitstatus($status);
+                                $defer->reject(new \RuntimeException('child errored with status: ' . $code));
+                                @socket_close($sockets[1]);
+                                @socket_close($sockets[0]);
+                                return;
+                            }
+                            return $defer->reject(new \RuntimeException('child failed with unknown status'));
                         }
-                        return $defer->reject(new \RuntimeException('child failed with unknown status'));
+                    });
+                } else {
+                    // Child
+                    try {
+                        $res = call_user_func_array($func, $args);
+                        $res = serialize($res);
+                        $written = socket_write($sockets[0], $res, strlen($res));
+                        if ($written === false) {
+                            exit(1);
+                        }
+                    } catch(\Exception $e) {
+                        static::flattenExceptionBacktrace($e);
+                        $res = serialize($e);
+                        $written = socket_write($sockets[0], $res, strlen($res));
+                        if ($written === false) {
+                            exit(1);
+                        }
                     }
-                });
-            } else {
-                // Child
-                try {
-                    $res = call_user_func_array($func, $args);
-                    $res = serialize($res);
-                    $written = socket_write($sockets[0], $res, strlen($res));
-                    if ($written === false) {
-                        exit(1);
-                    }
-                } catch(\Exception $e) {
-                    static::flattenExceptionBacktrace($e);
-                    $res = serialize($e);
-                    $written = socket_write($sockets[0], $res, strlen($res));
-                    if ($written === false) {
-                        exit(1);
-                    }
+                    exit(0);
                 }
-                exit(0);
-            }
-        })
-        ->otherwise(function($e) use ($defer) {
-            $defer->reject($e);
-        });
+            })
+            ->otherwise(function($e) use ($defer) {
+                $defer->reject($e);
+            });
         return $defer->promise();
     }
 

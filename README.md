@@ -108,7 +108,7 @@ Promise\all($promises)
   });
 ```
 
-There's a limit of 50 simultaneously running async forks.
+There's a limit of 20 simultaneously running async forks.
 This limit can be changed by calling `Async\setForksLimit`.
 
 ```php

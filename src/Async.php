@@ -319,7 +319,8 @@ final class Async
             if (!$running) {
                 $running = true;
                 static::resolve($func)
-                    ->then(function($res) use ($defer) {
+                    ->then(function($res) use ($defer, $timer, $loop) {
+                        $loop->cancelTimer($timer);
                         $defer->resolve($res);
                     })
                     ->otherwise(function($e) use (&$last_e, $defer, $type, $loop, $timer) {
@@ -332,8 +333,8 @@ final class Async
                             }
                         }
                         if (!$ignore) {
-                            $defer->reject($e);
                             $loop->cancelTimer($timer);
+                            $defer->reject($e);
                         }
                     })
                     ->always(function() use (&$running) {

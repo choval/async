@@ -418,4 +418,17 @@ class FunctionsTest extends TestCase
         $res = Async\wait( $func_c );
         $this->assertEquals($id, $res);
     }
+
+
+    public function testTimeout()
+    {
+        $defer = new Deferred();
+        $promise = $defer->promise();
+        static::$loop->addTimer(1, function() use ($defer) {
+            $defer->resolve(true);
+        });
+        $this->expectException(\React\Promise\Timer\TimeoutException::class);
+        $this->expectExceptionMessage('Timed out after 0.5 seconds');
+        $res = Async\wait( Async\timeout($promise, 0.5), 1);
+    }
 }

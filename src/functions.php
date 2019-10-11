@@ -253,3 +253,20 @@ function chain_resolve()
 {
     return call_user_func_array([Async::class, 'chainResolve'], func_get_args());
 }
+
+
+/**
+ *
+ *
+ *
+ */
+function timeout()
+{
+    $args = func_get_args();
+    $first = current($args);
+    if (!($first instanceof LoopInterface)) {
+        $loop = Async::getLoop();
+        array_unshift($args, $loop);
+    }
+    return call_user_func_array([Async::class, 'timeoutWithLoop'], $args);
+}

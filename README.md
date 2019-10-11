@@ -247,6 +247,25 @@ Async\retry($func, $retries, 0.1, 'bad error')
  */
 ```
 
+### timeout
+
+Alias of `React\Promise\Timer\timeout()` with a resolve for the promise, allowing to pass a `Generator` or a `Closure`.
+
+```php
+$func = function() {
+    yield Async\sleep(2);
+    return true;
+};
+Async\timeout($func, 1.5)
+    ->then(function($r) {
+        // Will not reach here
+    })
+    ->otherwise(function($e) {
+        // Will reach here
+        $timedout_seconds = $e->getTimeout();
+    });
+```
+
 ## License
 
 MIT, see LICENSE

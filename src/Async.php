@@ -17,6 +17,7 @@ use React\Promise\FulfilledPromise;
 use React\Promise\PromiseInterface;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
+use React\Promise\Timer;
 
 use React\Stream\ReadableStreamInterface;
 
@@ -286,6 +287,20 @@ final class Async
                 $defer->reject($e);
             });
         return $defer->promise();
+    }
+
+
+
+    /**
+     * Timeout
+     */
+    public static function timeout($func, float $timeout)
+    {
+        return static::timeoutWithLoop(static::getLoop(), $func, $timeout);
+    }
+    public static function timeoutWithLoop(LoopInterface $loop, $func, float $timeout)
+    {
+        return Timer\timeout( static::resolve($func), $timeout, $loop);
     }
 
 

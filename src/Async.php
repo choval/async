@@ -323,8 +323,8 @@ final class Async
         $defer = new Deferred();
         $i = $retries;
         $last_e = new \RuntimeException('Failed retries');
-        $running = false;
-        $loop->addPeriodicTimer($frequency, function($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type) {
+        $running = true;
+        $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type) {
             if ($i >= 0) {
                 $i--;
             } else {
@@ -357,6 +357,28 @@ final class Async
                     });
             }
         });
+        static::resolve($func)
+            ->then(function($res) use ($defer, $timer, $loop) {
+                $loop->cancelTimer($timer);
+                $defer->resolve($res);
+            })
+            ->otherwise(function($e) use (&$last_e, $defer, $type, $loop, $timer) {
+                $last_e = $e;
+                $msg = $e->getMessage();
+                $ignore = false;
+                foreach($type as $tmp) {
+                    if ($tmp == $msg || is_a($e, $tmp)) {
+                        $ignore = true;
+                    }
+                }
+                if (!$ignore) {
+                    $loop->cancelTimer($timer);
+                    $defer->reject($e);
+                }
+            })
+            ->always(function() use (&$running) {
+                $running = false;
+            });
         return $defer->promise();
     }
 

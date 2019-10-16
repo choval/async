@@ -536,7 +536,7 @@ final class Async
             };
             $stream->on('data', $bufferer);
             $stream->on('error', function ($error) use ($reject) {
-                $reject(new \RuntimeException('An error occured on the underlying stream while buffering', 0, $error));
+                $reject($error);
             });
 
             $stream->on('close', function () use ($resolve, &$buffer, &$type) {

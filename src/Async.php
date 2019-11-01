@@ -2,6 +2,7 @@
 
 namespace Choval\Async;
 
+use Choval\Async\Exception;
 use Closure;
 use Clue\React\Block;
 use Evenement\EventEmitterInterface;
@@ -221,8 +222,9 @@ final class Async
         }
         $defer = new Deferred();
         $id = random_bytes(16);
+        $trace = debug_backtrace();
         static::waitFreeFork($loop)
-            ->then(function() use ($loop, $cmd, $timeout, $defer, $id) {
+            ->then(function() use ($loop, $cmd, $timeout, $defer, $id, $trace) {
                 static::addFork($id, $defer->promise());
                 $buffer = '';
                 $proc = new Process($cmd);
@@ -257,7 +259,7 @@ final class Async
                 $proc->stdout->on('error', function (\Exception $e) use (&$err) {
                     $err = $e;
                 });
-                $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc, $id) {
+                $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc, $id, $trace) {
                     static::removeFork($id);
                     $proc->stdout->close();
                     if ($timer) {
@@ -271,14 +273,14 @@ final class Async
                      */
                     if ($err) {
                         $msg = $err->getMessage();
-                        $e = new \RuntimeException($msg, $termSignal, $err);
+                        $e = new Exception($msg, $termSignal, $trace, $err);
                         return $defer->reject($e);
                     }
                     if (!is_null($termSignal)) {
-                        return $defer->reject(new \RuntimeException('Process terminated with code: ' . $termSignal, $termSignal));
+                        return $defer->reject(new Exception('Process terminated with code: ' . $termSignal, $termSignal, $trace));
                     }
                     if ($exitCode) {
-                        return $defer->reject(new \RuntimeException('Process exited with code: ' . $exitCode."\n$buffer", $exitCode));
+                        return $defer->reject(new Exception('Process exited with code: ' . $exitCode."\n$buffer", $exitCode, $trace));
                     }
                     $defer->resolve($buffer);
                 });
@@ -315,14 +317,15 @@ final class Async
     public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.1, $type = null)
     {
         if (is_null($type)) {
-            $type = \Exception::class;
+            $type = \Throwable::class;
         }
         if (!is_array($type)) {
             $type = [$type];
         }
         $defer = new Deferred();
         $i = $retries;
-        $last_e = new \RuntimeException('Failed retries');
+        $trace = debug_backtrace();
+        $last_e = new Exception('Failed retries', 0, $trace);
         $running = true;
         $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type) {
             if ($i >= 0) {
@@ -395,23 +398,24 @@ final class Async
     {
         $defer = new Deferred();
         $id = random_bytes(16);
+        $trace = debug_backtrace();
         static::waitFreeFork($loop)
-            ->then(function() use ($loop, $func, $args, $defer, $id) {
+            ->then(function() use ($loop, $func, $args, $defer, $id, $trace) {
                 static::addFork($id, $defer->promise());
                 $sockets = array();
                 $domain = (strtoupper(substr(PHP_OS, 0, 3)) == 'WIN' ? AF_INET : AF_UNIX);
                 if (socket_create_pair($domain, SOCK_STREAM, 0, $sockets) === false) {
-                    return new RejectedPromise(new \RuntimeException('socket_create_pair failed: ' . socket_strerror(socket_last_error())));
+                    return new RejectedPromise(new Exception('socket_create_pair failed: ' . socket_strerror(socket_last_error()), 0, $trace));
                 }
 
                 $pid = pcntl_fork();
                 if ($pid == -1) {
                     static::removeFork($id);
-                    return new RejectedPromise(new \RuntimeException('Async fork failed'));
+                    return new RejectedPromise(new Exception('Async fork failed', 0, $trace));
                 } elseif ($pid) {
                     // Parent
                     $buffer = '';
-                    $loop->addPeriodicTimer(0.001, function ($timer) use ($pid, $defer, &$sockets, $loop, &$buffer, $id) {
+                    $loop->addPeriodicTimer(0.001, function ($timer) use ($pid, $defer, &$sockets, $loop, &$buffer, $id, $trace) {
                         while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
                             $buffer .= $chunk;
                         }
@@ -421,7 +425,7 @@ final class Async
                             $loop->cancelTimer($timer);
                             if (!pcntl_wifexited($status)) {
                                 $code = pcntl_wexitstatus($status);
-                                $defer->reject(new \RuntimeException('child exited with status: ' . $code));
+                                $defer->reject(new Exception('child exited with status: ' . $code, $code, $trace));
                                 @socket_close($sockets[1]);
                                 @socket_close($sockets[0]);
                                 return;
@@ -442,12 +446,12 @@ final class Async
                             static::removeFork($id);
                             if (!pcntl_wifexited($status)) {
                                 $code = pcntl_wexitstatus($status);
-                                $defer->reject(new \RuntimeException('child errored with status: ' . $code));
+                                $defer->reject(new Exception('child errored with status: ' . $code, $code, $trace));
                                 @socket_close($sockets[1]);
                                 @socket_close($sockets[0]);
                                 return;
                             }
-                            return $defer->reject(new \RuntimeException('child failed with unknown status'));
+                            return $defer->reject(new Exception('child failed with unknown status', 0, $trace));
                         }
                     });
                 } else {
@@ -459,7 +463,7 @@ final class Async
                         if ($written === false) {
                             exit(1);
                         }
-                    } catch(\Exception $e) {
+                    } catch(\Throwable $e) {
                         static::flattenExceptionBacktrace($e);
                         $res = serialize($e);
                         $written = socket_write($sockets[0], $res, strlen($res));
@@ -521,6 +525,7 @@ final class Async
         $bufferer;
         $size = 0;
         $type = 'array';
+        $trace = debug_backtrace();
         $promise = new Promise\Promise(function ($resolve, $reject) use ($stream, $maxLength, &$buffer, &$bufferer, &$size, &$type) {
             $bufferer = function ($data) use (&$buffer, $reject, $maxLength, &$size, &$type) {
                 $buffer[] = $data;
@@ -545,8 +550,8 @@ final class Async
                 }
                 $resolve($buffer);
             });
-        }, function ($_, $reject) {
-            $reject(new \RuntimeException('Cancelled buffering'));
+        }, function ($_, $reject) use ($trace) {
+            $reject(new Exception('Cancelled buffering', 0, $trace));
         });
 
         return $promise->then(null, function ($error) use (&$buffer, &$bufferer, $stream, $type) {
@@ -572,14 +577,14 @@ final class Async
         if (is_a($gen, Generator::class)) {
             try {
                 $gen = static::unwrapGenerator($gen);
-            } catch(\Exception $e) {
+            } catch(\Throwable $e) {
                 return new RejectedPromise($e);
             }
         }
         if (is_a($gen, Closure::class)) {
             try {
                 $gen = static::resolve($gen());
-            } catch(\Exception $e) {
+            } catch(\Throwable $e) {
                 return new RejectedPromise($e);
             }
         }

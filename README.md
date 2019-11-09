@@ -4,6 +4,7 @@ A collection of functions for programming in [ReactPHP](https://reactphp.org).
 
 * [Install](#install)
 * [Usage](#usage)
+* Functions
   * [execute](#execute)
   * [resolve](#resolve)
   * [async](#async)
@@ -30,6 +31,84 @@ Async\set_loop($loop);
 
 If the loop is not set, all calls except `resolve` and `chain_resolve`  
 need a [`LoopInterface`](https://github.com/reactphp/event-loop) as the first parameter.
+
+### Using yield
+
+Regular promise handling:
+
+```php
+use React\Promise\FulfilledPromise;
+
+function future($i=0)
+{
+	return new FulfilledPromise($i+1);
+}
+
+future()
+	->then(function($i) {
+		return future($i);
+	})
+	->then(function($i) {
+		return future($i);
+	})
+	->then(function($i) {
+		return future($i);
+	})
+	->then(function($i) {
+		return future($i);
+	})
+	->then(function($i) {
+		echo $i;
+	});
+
+// Prints 5, but that chain nightmare...
+```
+
+With `Choval\Async`
+
+```php
+use Choval\Async;
+use React\Promise\FulfilledPromise;
+
+function future($i=0)
+{
+	return new FulfilledPromise($i+1);
+}
+
+Async\resolve(function() {
+	$i = yield future();
+	$i = yield future($i);
+	$i = yield future($i);
+	$i = yield future($i);
+	$i = yield future($i);
+	echo $i;
+});
+
+// Prints 5 as well ;-)
+```
+
+Or just loop it ...
+
+```php
+use Choval\Async;
+use React\Promise\FulfilledPromise;
+
+function future($i=0)
+{
+	return new FulfilledPromise($i+1);
+}
+
+Async\resolve(function() {
+	$i=0;
+	for($e=0;$e<5;$e++) {
+		$i = yield future($i);
+	}
+	echo $i;
+});
+```
+
+
+## Functions
 
 ### execute
 

@@ -7,6 +7,9 @@ use React\Promise;
 
 use React\Promise\Deferred;
 
+class TestResolveClass {
+}
+
 class FunctionsTest extends TestCase
 {
     public static $loop;
@@ -172,6 +175,30 @@ class FunctionsTest extends TestCase
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Crap');
         $msg = Async\wait(Async\resolve($func3), 1);
+    }
+
+
+
+    public function testResolveWithNonExistingFunction()
+    {
+        $this->expectException(\Throwable::class);
+        Async\wait(Async\resolve(function() {
+            yield Async\resolve(function() {
+                calling_non_existing_function();
+            });
+        }));
+    }
+
+
+
+    public function testResolveWithNonExistingClassMethod()
+    {
+        $this->expectException(\Throwable::class);
+        Async\wait(Async\resolve(function() {
+            yield Async\resolve(function() {
+                TestResolveClass::non_existing_method();
+            });
+        }));
     }
 
 

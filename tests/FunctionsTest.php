@@ -157,7 +157,7 @@ class FunctionsTest extends TestCase
             return 'fail';
         };
         try {
-            $msg = Async\wait(Async\resolve($func));
+            $msg = Async\wait(Async\resolve($func), 1);
         } catch (\Exception $e) {
             $msg = $e->getMessage();
         }
@@ -205,16 +205,29 @@ class FunctionsTest extends TestCase
 
     public function testExceptionInsideResolve()
     {
-        return Async\wait( Async\resolve(function() {
-            $res = false;
+        $res = Async\wait( Async\resolve(function() {
+            $res = true;
             try {
-                $res = yield Async\execute('sleep 2', 1);
+                yield Async\execute('sleep 2', 1);
+                $res = false;
             } catch(\Exception $e) {
                 echo "MESSAGE CAUGHT\n";
-                echo $e->getMessage();
+                echo $e->getMessage()."\n";
             }
-            $this->assertFalse($res);
+            $this->assertTrue($res);
             return $res;
+        }));
+        $this->assertTrue($res);
+    }
+
+
+
+    public function testExceptionThrowInsideResolve()
+    {
+        $this->expectException(\Exception::class);
+        $res = Async\wait( Async\resolve(function() {
+            throw new \Exception('Oops');
+            return 'FAIL';
         }));
     }
 

@@ -257,7 +257,7 @@ function chain_resolve()
 
 /**
  *
- *
+ * Timeout
  *
  */
 function timeout()

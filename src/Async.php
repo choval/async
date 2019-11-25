@@ -178,8 +178,8 @@ final class Async
             try {
                 return Block\await($promise, $loop, $timeout);
             } catch(\Throwable $e) {
-                if (is_a($e, \UnexpectedValueException::class)) {
-                    $prev = $e->getPrevious();
+                $prev = $e->getPrevious();
+                if ($prev) {
                     throw $prev;
                 }
                 throw $e;
@@ -231,13 +231,13 @@ final class Async
                 $timer = false;
                 $err;
                 if ($timeout > 0) {
-                    $timer = $loop->addTimer($timeout, function () use ($proc, &$err) {
+                    $timer = $loop->addTimer($timeout, function () use ($proc, &$err, $timeout) {
                         $proc->stdin->end();
                         foreach ($proc->pipes as $pipe) {
                             $pipe->close();
                         }
                         $proc->terminate(\SIGKILL ?? 9);
-                        $err = new \RuntimeException('Process timed out');
+                        $err = new \RuntimeException('Process timed out in '.$timeout .' secs');
                     });
                 }
                 $proc->start($loop);
@@ -497,32 +497,24 @@ final class Async
      */
     public static function unwrapGenerator(Generator $generator, int $depth=0)
     {
-        $value = $generator->current();
-        if (!is_object($value)) {
-            return $value;
+        if (!$generator->valid()) {
+            $return = $generator->getReturn();
+            return $return;
         }
+        $value = $generator->current();
         $defer = new Deferred();
         static::resolve($value, $depth++)
             ->then(function ($res) use ($generator, $defer, $depth) {
-                $generator->send($res);
-                if ($generator->valid()) {
-                    return $defer->resolve($generator);
-                    /*
-                    $final = static::resolve($generator, $depth++);
-                    return $defer->resolve($final);
-                     */
+                try {
+                    $generator->send($res);
+                } catch(\Throwable $e) {
+                    $defer->reject($e);
                 }
-                $return = $generator->getReturn();
-                $defer->resolve($return);
+                return $defer->resolve( static::resolve( $generator, $depth++) );
             })
-            ->otherwise(function ($e) use ($generator, $defer) {
-                if ($generator->valid()) {
-                    $defer->resolve(null);
-                    $generator->throw($e);
-                    return;
-                }
-                $defer->reject($e);
+            ->otherwise(function ($e) use ($generator, $defer, $depth) {
                 $generator->throw($e);
+                return $defer->resolve( static::resolve( $generator, $depth++) );
             });
         return $defer->promise();
     }
@@ -595,21 +587,18 @@ final class Async
      */
     public static function resolve($gen, int $depth=0)
     {
-        if (is_a($gen, Generator::class)) {
-            try {
-                $gen = static::unwrapGenerator($gen, $depth++);
-            } catch(\Throwable $e) {
-                return new RejectedPromise($e);
-            }
-        }
         if (is_a($gen, Closure::class)) {
-            $gen = static::resolve($gen(), $depth++);
+            $gen = $gen();
+        }
+        if (is_a($gen, Generator::class)) {
+            $gen = static::unwrapGenerator($gen, $depth);
         }
         if (is_a($gen, PromiseInterface::class)) {
             $defer = new Deferred();
             $gen
                 ->then(function($res) use ($defer, $depth) {
-                    $defer->resolve( static::resolve( $res , $depth++) );
+                    $out = static::resolve( $res , $depth++);
+                    $defer->resolve($out);
                 })
                 ->otherwise(function($e) use ($defer, $depth) {
                     $defer->reject($e);

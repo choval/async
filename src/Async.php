@@ -336,52 +336,62 @@ final class Async
             }
             if (!$running) {
                 $running = true;
-                static::resolve($func)
-                    ->then(function($res) use ($defer, $timer, $loop) {
-                        $loop->cancelTimer($timer);
-                        $defer->resolve($res);
-                    })
-                    ->otherwise(function($e) use (&$last_e, $defer, $type, $loop, $timer) {
-                        $last_e = $e;
-                        $msg = $e->getMessage();
-                        $ignore = false;
-                        foreach($type as $tmp) {
-                            if ($tmp == $msg || is_a($e, $tmp)) {
-                                $ignore = true;
-                            }
-                        }
-                        if (!$ignore) {
+                try {
+                    static::resolve($func)
+                        ->then(function($res) use ($defer, $timer, $loop) {
                             $loop->cancelTimer($timer);
-                            $defer->reject($e);
+                            $defer->resolve($res);
+                        })
+                        ->otherwise(function($e) {
+                            throw $e;
+                        })
+                        ->always(function() use (&$running) {
+                            $running = false;
+                        });
+                } catch(\Throwable $e) {
+                    $last_e = $e;
+                    $msg = $e->getMessage();
+                    $ignore = false;
+                    foreach($type as $tmp) {
+                        if ($tmp == $msg || is_a($e, $tmp)) {
+                            $ignore = true;
                         }
-                    })
-                    ->always(function() use (&$running) {
-                        $running = false;
-                    });
+                    }
+                    if (!$ignore) {
+                        $loop->cancelTimer($timer);
+                        $defer->reject($e);
+                    }
+                    $running = false;
+                }
             }
         });
-        static::resolve($func)
-            ->then(function($res) use ($defer, $timer, $loop) {
-                $loop->cancelTimer($timer);
-                $defer->resolve($res);
-            })
-            ->otherwise(function($e) use (&$last_e, $defer, $type, $loop, $timer) {
-                $last_e = $e;
-                $msg = $e->getMessage();
-                $ignore = false;
-                foreach($type as $tmp) {
-                    if ($tmp == $msg || is_a($e, $tmp)) {
-                        $ignore = true;
-                    }
-                }
-                if (!$ignore) {
+        try {
+            static::resolve($func)
+                ->then(function($res) use ($defer, $timer, $loop) {
                     $loop->cancelTimer($timer);
-                    $defer->reject($e);
+                    $defer->resolve($res);
+                })
+                ->otherwise(function($e) {
+                    throw $e;
+                })
+                ->always(function() use (&$running) {
+                    $running = false;
+                });
+        } catch(\Throwable $e) {
+            $last_e = $e;
+            $msg = $e->getMessage();
+            $ignore = false;
+            foreach($type as $tmp) {
+                if ($tmp == $msg || is_a($e, $tmp)) {
+                    $ignore = true;
                 }
-            })
-            ->always(function() use (&$running) {
-                $running = false;
-            });
+            }
+            if (!$ignore) {
+                $loop->cancelTimer($timer);
+                $defer->reject($e);
+            }
+            $running = false;
+        }
         return $defer->promise();
     }
 
@@ -485,21 +495,32 @@ final class Async
     /**
      * Unwraps a generator and solves yielded promises
      */
-    public static function unwrapGenerator(Generator $generator)
+    public static function unwrapGenerator(Generator $generator, int $depth=0)
     {
         $value = $generator->current();
+        if (!is_object($value)) {
+            return $value;
+        }
         $defer = new Deferred();
-        static::resolve($value)
-            ->then(function ($res) use ($generator, $defer) {
+        static::resolve($value, $depth++)
+            ->then(function ($res) use ($generator, $defer, $depth) {
                 $generator->send($res);
                 if ($generator->valid()) {
-                    $final = static::resolve($generator);
+                    return $defer->resolve($generator);
+                    /*
+                    $final = static::resolve($generator, $depth++);
                     return $defer->resolve($final);
+                     */
                 }
                 $return = $generator->getReturn();
                 $defer->resolve($return);
             })
             ->otherwise(function ($e) use ($generator, $defer) {
+                if ($generator->valid()) {
+                    $defer->resolve(null);
+                    $generator->throw($e);
+                    return;
+                }
                 $defer->reject($e);
                 $generator->throw($e);
             });
@@ -572,29 +593,25 @@ final class Async
      * - Promise
      * - Stream
      */
-    public static function resolve($gen)
+    public static function resolve($gen, int $depth=0)
     {
         if (is_a($gen, Generator::class)) {
             try {
-                $gen = static::unwrapGenerator($gen);
+                $gen = static::unwrapGenerator($gen, $depth++);
             } catch(\Throwable $e) {
                 return new RejectedPromise($e);
             }
         }
         if (is_a($gen, Closure::class)) {
-            try {
-                $gen = static::resolve($gen());
-            } catch(\Throwable $e) {
-                return new RejectedPromise($e);
-            }
+            $gen = static::resolve($gen(), $depth++);
         }
         if (is_a($gen, PromiseInterface::class)) {
             $defer = new Deferred();
             $gen
-                ->then(function($res) use ($defer) {
-                    $defer->resolve( static::resolve( $res ) );
+                ->then(function($res) use ($defer, $depth) {
+                    $defer->resolve( static::resolve( $res , $depth++) );
                 })
-                ->otherwise(function($e) use ($defer) {
+                ->otherwise(function($e) use ($defer, $depth) {
                     $defer->reject($e);
                 });
             return $defer->promise();

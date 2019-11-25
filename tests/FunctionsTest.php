@@ -109,7 +109,7 @@ class FunctionsTest extends TestCase
 
 
     /**
-     *
+     * Tests the resolve generator
      */
     public function testResolveGenerator()
     {
@@ -181,9 +181,9 @@ class FunctionsTest extends TestCase
 
     public function testResolveWithNonExistingFunction()
     {
-        $this->expectException(\Throwable::class);
         Async\wait(Async\resolve(function() {
             yield Async\resolve(function() {
+                $this->expectException(\Throwable::class);
                 calling_non_existing_function();
             });
         }));
@@ -193,11 +193,28 @@ class FunctionsTest extends TestCase
 
     public function testResolveWithNonExistingClassMethod()
     {
-        $this->expectException(\Throwable::class);
         Async\wait(Async\resolve(function() {
             yield Async\resolve(function() {
+                $this->expectException(\Throwable::class);
                 TestResolveClass::non_existing_method();
             });
+        }));
+    }
+
+
+
+    public function testExceptionInsideResolve()
+    {
+        return Async\wait( Async\resolve(function() {
+            $res = false;
+            try {
+                $res = yield Async\execute('sleep 2', 1);
+            } catch(\Exception $e) {
+                echo "MESSAGE CAUGHT\n";
+                echo $e->getMessage();
+            }
+            $this->assertFalse($res);
+            return $res;
         }));
     }
 

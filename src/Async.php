@@ -14,11 +14,11 @@ use React\EventLoop\LoopInterface;
 use React\Promise;
 use React\Promise\Deferred;
 
+use React\Promise\Timer\TimeoutException;
 use React\Promise\FulfilledPromise;
 use React\Promise\PromiseInterface;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
-use React\Promise\Timer;
 
 use React\Stream\ReadableStreamInterface;
 
@@ -151,6 +151,8 @@ final class Async
 
     /**
      * Sync
+     * We run Block\await with a catch multiple times, to avoid having
+     * it block timers and promises added to the loop after calling sync.
      */
     public static function sync($promise, float $timeout = null)
     {
@@ -171,21 +173,37 @@ final class Async
             }
             $promise = Promise\all($promises);
         }
-        else {
+        else if (!is_a($promise, PromiseInterface::class)) {
             $promise = static::resolve($promise);
         }
-        if (is_a($promise, PromiseInterface::class)) {
-            try {
-                return Block\await($promise, $loop, $timeout);
-            } catch(\Throwable $e) {
-                $prev = $e->getPrevious();
-                if ($prev) {
-                    throw $prev;
+        $freq = 1;
+        if (is_null($timeout)) {
+            while(true) {
+                try {
+                    return Block\await($promise, $loop, $freq);
+                } catch(TimeoutException $e) {
                 }
-                throw $e;
             }
         }
-        return $promise;
+
+        $freq = $timeout / 100;
+        if ($freq < 0.01) {
+            $freq = 0.01;
+        }
+        $limit = $timeout / $freq;
+
+        $exit = false;
+        $loop->addTimer($timeout, function() use (&$exit) {
+            $exit = true;
+        });
+        while(!$exit) {
+            try {
+                return Block\await($promise, $loop, $freq);
+            } catch(TimeoutException $e) {
+            }
+        }
+        $ef = new TimeoutException($timeout, 'Wait timed out in '.$timeout. ' secs', 408, $e->getPrevious());
+        throw $ef;
     }
 
 
@@ -302,7 +320,27 @@ final class Async
     }
     public static function timeoutWithLoop(LoopInterface $loop, $func, float $timeout)
     {
-        return Timer\timeout( static::resolve($func), $timeout, $loop);
+        $defer = new Deferred();
+        if (is_a($func, PromiseInterface::class)) {
+            $promise = $func;
+        } else {
+            $promise = static::resolve($func);
+        }
+        $timer = $loop->addTimer($timeout, function() use ($defer, $timeout) {
+            $defer->reject( new Exception('Timed out after '. $timeout .' secs') );
+//            $defer->reject( new TimeoutException($timeout, 'Timed out after ' . $timeout . ' secs') );
+        });
+        $promise
+            ->then(function($res) use ($defer) {
+                $defer->resolve($res);
+            })
+            ->otherwise(function($e) use ($defer) {
+                $defer->reject($e);
+            })
+            ->always(function() use ($timer, $loop) {
+                $loop->cancelTimer($timer);
+            });
+        return $defer->promise();
     }
 
 
@@ -336,62 +374,54 @@ final class Async
             }
             if (!$running) {
                 $running = true;
-                try {
-                    static::resolve($func)
-                        ->then(function($res) use ($defer, $timer, $loop) {
-                            $loop->cancelTimer($timer);
-                            $defer->resolve($res);
-                        })
-                        ->otherwise(function($e) {
-                            throw $e;
-                        })
-                        ->always(function() use (&$running) {
-                            $running = false;
-                        });
-                } catch(\Throwable $e) {
-                    $last_e = $e;
-                    $msg = $e->getMessage();
-                    $ignore = false;
-                    foreach($type as $tmp) {
-                        if ($tmp == $msg || is_a($e, $tmp)) {
-                            $ignore = true;
-                        }
-                    }
-                    if (!$ignore) {
+                static::resolve($func)
+                    ->then(function($res) use ($defer, $timer, $loop) {
                         $loop->cancelTimer($timer);
-                        $defer->reject($e);
-                    }
-                    $running = false;
-                }
+                        $defer->resolve($res);
+                    })
+                    ->otherwise(function($e) use ($defer, $loop, $timer, $type, &$last_e) {
+                        $last_e = $e;
+                        $msg = $e->getMessage();
+                        $ignore = false;
+                        foreach($type as $tmp) {
+                            if ($tmp == $msg || is_a($e, $tmp)) {
+                                $ignore = true;
+                                break;
+                            }
+                        }
+                        if (!$ignore) {
+                            $loop->cancelTimer($timer);
+                            $defer->reject($e);
+                        }
+                    })
+                    ->always(function() use (&$running) {
+                        $running = false;
+                    });
             }
         });
-        try {
-            static::resolve($func)
-                ->then(function($res) use ($defer, $timer, $loop) {
-                    $loop->cancelTimer($timer);
-                    $defer->resolve($res);
-                })
-                ->otherwise(function($e) {
-                    throw $e;
-                })
-                ->always(function() use (&$running) {
-                    $running = false;
-                });
-        } catch(\Throwable $e) {
-            $last_e = $e;
-            $msg = $e->getMessage();
-            $ignore = false;
-            foreach($type as $tmp) {
-                if ($tmp == $msg || is_a($e, $tmp)) {
-                    $ignore = true;
-                }
-            }
-            if (!$ignore) {
+        static::resolve($func)
+            ->then(function($res) use ($defer, $timer, $loop) {
                 $loop->cancelTimer($timer);
-                $defer->reject($e);
-            }
-            $running = false;
-        }
+                $defer->resolve($res);
+            })
+            ->otherwise(function($e) use ($defer, $loop, $timer, $type, &$last_e) {
+                $last_e = $e;
+                $msg = $e->getMessage();
+                $ignore = false;
+                foreach($type as $tmp) {
+                    if ($tmp == $msg || is_a($e, $tmp)) {
+                        $ignore = true;
+                        break;
+                    }
+                }
+                if (!$ignore) {
+                    $loop->cancelTimer($timer);
+                    $defer->reject($e);
+                }
+            })  
+            ->always(function() use (&$running) {
+                $running = false;
+            });
         return $defer->promise();
     }
 
@@ -497,10 +527,6 @@ final class Async
      */
     public static function unwrapGenerator(Generator $generator, int $depth=0)
     {
-        if (!$generator->valid()) {
-            $return = $generator->getReturn();
-            return $return;
-        }
         $value = $generator->current();
         $defer = new Deferred();
         static::resolve($value, $depth++)
@@ -509,12 +535,32 @@ final class Async
                     $generator->send($res);
                 } catch(\Throwable $e) {
                     $defer->reject($e);
+                    if ($generator->valid()) {
+                        $generator->throw($e);
+                    }
+                    return;
+                }
+                if (!$generator->valid()) {
+                    try {
+                        $return = $generator->getReturn();
+                    } catch(\Throwable $e) {
+                        return $defer->resolve(null);
+                    }
+                    return $defer->resolve($return);
                 }
                 return $defer->resolve( static::resolve( $generator, $depth++) );
             })
             ->otherwise(function ($e) use ($generator, $defer, $depth) {
-                $generator->throw($e);
-                return $defer->resolve( static::resolve( $generator, $depth++) );
+                if ($generator->valid()) {
+                    try {
+                        $generator->throw($e);
+                    } catch(\Throwable $e) {
+                        return $defer->reject($e);
+                    }
+                    return $defer->resolve( static::resolve( $generator, $depth++) );
+                }
+                return $defer->reject($e);
+                // return $defer->resolve( static::resolve( $generator, $depth++) );
             });
         return $defer->promise();
     }
@@ -588,22 +634,27 @@ final class Async
     public static function resolve($gen, int $depth=0)
     {
         if (is_a($gen, Closure::class)) {
-            $gen = $gen();
+            try {
+                $gen = static::resolve($gen(), $depth++);
+            } catch(\Exception $e) {
+                return new RejectedPromise($e);
+            }
         }
         if (is_a($gen, Generator::class)) {
-            $gen = static::unwrapGenerator($gen, $depth);
+            try {
+                $gen = static::unwrapGenerator($gen, $depth++);
+            } catch(\Exception $e) {
+                return new RejectedPromise($e);
+            }
+        }
+        if (is_a($gen, FulfilledPromise::class)) {
+            return $gen;
+        }
+        if (is_a($gen, RejectedPromise::class)) {
+            return $gen;
         }
         if (is_a($gen, PromiseInterface::class)) {
-            $defer = new Deferred();
-            $gen
-                ->then(function($res) use ($defer, $depth) {
-                    $out = static::resolve( $res , $depth++);
-                    $defer->resolve($out);
-                })
-                ->otherwise(function($e) use ($defer, $depth) {
-                    $defer->reject($e);
-                });
-            return $defer->promise();
+            return $gen;
         }
         if (is_a($gen, ReadableStreamInterface::class)) {
             return static::buffer($gen);

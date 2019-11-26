@@ -4,6 +4,7 @@ use Choval\Async;
 use PHPUnit\Framework\TestCase;
 use React\EventLoop\Factory;
 use React\Promise;
+use Choval\Async\Exception as AsyncException;
 
 use React\Promise\Deferred;
 
@@ -60,8 +61,13 @@ class FunctionsTest extends TestCase
      */
     public function testSyncTimeout()
     {
-        $this->expectException(\React\Promise\Timer\TimeoutException::class);
-        $res = Async\wait(Async\sleep(1), 0.5);
+        try {
+            $res = Async\wait(Async\sleep(1), 0.5);
+            $this->assertFalse(true);
+        } catch(\Exception $e) {
+            $this->assertInstanceOf( \React\Promise\Timer\TimeoutException::class, $e);
+            $this->assertStringContainsString('Wait', $e->getMessage());
+        }
     }
 
 
@@ -224,11 +230,26 @@ class FunctionsTest extends TestCase
 
     public function testExceptionThrowInsideResolve()
     {
-        $this->expectException(\Exception::class);
+        $this->expectException(AsyncException::class);
         $res = Async\wait( Async\resolve(function() {
-            throw new \Exception('Oops');
+            yield;
+            throw new AsyncException('Oops');
             return 'FAIL';
-        }));
+        }), 1);
+    }
+
+
+
+    public function testExceptionThrowInsideMultipleResolve()
+    {
+        $this->expectException(AsyncException::class);
+        $res = Async\wait( Async\resolve(function() {
+            yield Async\resolve(function() {
+                yield;
+                throw new AsyncException('OopsMultiple');
+                return 'FAIL';
+            });
+        }), 1);
     }
 
 
@@ -479,13 +500,18 @@ class FunctionsTest extends TestCase
 
     public function testTimeout()
     {
-        $defer = new Deferred();
-        $promise = $defer->promise();
+        /*
         static::$loop->addTimer(1, function() use ($defer) {
+            var_dump('solving');
             $defer->resolve(true);
         });
-        $this->expectException(\React\Promise\Timer\TimeoutException::class);
-        $this->expectExceptionMessage('Timed out after 0.5 seconds');
-        $res = Async\wait( Async\timeout($promise, 0.5), 1);
+         */
+        return Async\wait(function() {
+            $defer = new Deferred();
+            $promise = $defer->promise();
+            $this->expectException( AsyncException::class );
+            $this->expectExceptionMessage('Timed out after 0.5 secs');
+            $res = yield Async\timeout($promise, 0.5);
+        }, 1);
     }
 }

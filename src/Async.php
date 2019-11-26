@@ -168,8 +168,8 @@ final class Async
         }
         if (is_array($promise)) {
             $promises = [];
-            foreach ($promise as $v) {
-                $promises[] = static::resolve($v);
+            foreach ($promise as $k=>$v) {
+                $promises[$k] = static::resolve($v);
             }
             $promise = Promise\all($promises);
         }

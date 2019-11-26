@@ -546,7 +546,7 @@ final class Async
                     } catch(\Throwable $e) {
                         return $defer->resolve(null);
                     }
-                    return $defer->resolve($return);
+                    return $defer->resolve(static::resolve($return, $depth++));
                 }
                 return $defer->resolve( static::resolve( $generator, $depth++) );
             })

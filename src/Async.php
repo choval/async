@@ -185,6 +185,14 @@ final class Async
                 } catch(CancelException $e) {
                     return;
                 } catch(TimeoutException $e) {
+                } 
+                catch (\Throwable $e) {
+                    $prev = $e->getPrevious();
+                    if ($prev) {
+                        throw $prev;
+                    } else {
+                        throw new Exception($e->getMessage(), $e->getCode(), $e->getTrace(), $e);
+                    }
                 }
             }
         }
@@ -202,7 +210,17 @@ final class Async
         while(!$exit) {
             try {
                 return Block\await($promise, $loop, $freq);
+            } catch(CancelException $e) {
+                return;
             } catch(TimeoutException $e) {
+            }
+            catch (\Throwable $e) {
+                $prev = $e->getPrevious();
+                if ($prev) {
+                    throw $prev;
+                } else {
+                    throw new Exception($e->getMessage(), $e->getCode(), $e->getTrace(), $e);
+                }
             }
         }
         $ef = new TimeoutException($timeout, 'Wait timed out in '.$timeout. ' secs', 408, $e->getPrevious());
@@ -538,7 +556,6 @@ final class Async
      */
     public static function unwrapGenerator(Generator $generator, int $depth=0, bool $cancellable = true)
     {
-        $value = $generator->current();
         $cancelled = false;
         $done = false;
         if ($cancellable) {
@@ -550,7 +567,8 @@ final class Async
         } else {
             $defer = new Deferred();
         }
-        static::resolve($value, ++$depth, $cancellable)->done(
+        $value = $generator->current();
+        static::resolve($value, ++$depth, false)->done(
             function ($res) use ($generator, $defer, $depth, &$cancelled, &$done, $cancellable) {
                 try {
                     $generator->send($res);
@@ -560,14 +578,14 @@ final class Async
                     if ($generator->valid()) {
                         $generator->throw($e);
                     }
-                    return;
+                    return $defer->reject($e);
                 }
                 if (!$generator->valid()) {
                     $done = true;
                     try {
                         $return = $generator->getReturn();
                     } catch(\Throwable $e) {
-                        return $defer->resolve(null);
+                        return $defer->reject($e);
                     }
                     return $defer->resolve($return);
                 }
@@ -610,7 +628,7 @@ final class Async
     {
         // Return null if stream is closed
         if (!$stream->isReadable()) {
-            return Promise\resolve();
+            return Promise\resolve(null);
         }
         $buffer = [];
         $bufferer;
@@ -641,16 +659,17 @@ final class Async
                 }
                 $resolve($buffer);
             });
-        }, function ($_, $reject) use ($trace) {
+        }, function ($resolve, $reject) use ($trace) {
             $reject(new Exception('Cancelled buffering', 0, $trace));
         });
 
-        return $promise->done(null, function ($error) use (&$buffer, &$bufferer, $stream, $type) {
+        $promise->done(null, function ($error) use (&$buffer, &$bufferer, $stream, $type) {
             // promise rejected => clear buffer and buffering
             $buffer = [];
             $stream->removeListener('data', $bufferer);
             throw $error;
         });
+        return $promise;
     }
 
 

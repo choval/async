@@ -3,6 +3,7 @@
 namespace Choval\Async;
 
 use Choval\Async\Exception;
+use Choval\Async\CancelException;
 use Closure;
 use Clue\React\Block;
 use Evenement\EventEmitterInterface;
@@ -169,18 +170,21 @@ final class Async
         if (is_array($promise)) {
             $promises = [];
             foreach ($promise as $k=>$v) {
-                $promises[$k] = static::resolve($v);
+                $promises[$k] = static::resolve($v, 1);
             }
             $promise = Promise\all($promises);
         }
         else if (!is_a($promise, PromiseInterface::class)) {
-            $promise = static::resolve($promise);
+            $promise = static::resolve($promise, 1);
         }
-        $freq = 1;
+        $freq = 0.1;
         if (is_null($timeout)) {
             while(true) {
                 try {
                     return Block\await($promise, $loop, $freq);
+                } catch(CancelException $e) {
+                    var_dump($e->getMessage());
+                    return;
                 } catch(TimeoutException $e) {
                 }
             }
@@ -528,12 +532,20 @@ final class Async
     public static function unwrapGenerator(Generator $generator, int $depth=0)
     {
         $value = $generator->current();
-        $defer = new Deferred();
-        static::resolve($value, $depth++)
-            ->then(function ($res) use ($generator, $defer, $depth) {
+        $cancelled = false;
+        $done = false;
+        $defer = new Deferred(function($resolve, $reject) use (&$cancelled, $generator, $depth, &$done) {
+            if ($generator->valid() && !$done) {
+                var_dump('CANCELLED AT DEPTH '.$depth);
+                $cancelled = true;
+            }
+        });
+        static::resolve($value, ++$depth)
+            ->then(function ($res) use ($generator, $defer, $depth, &$cancelled, &$done) {
                 try {
                     $generator->send($res);
                 } catch(\Throwable $e) {
+                    $done = true;
                     $defer->reject($e);
                     if ($generator->valid()) {
                         $generator->throw($e);
@@ -541,6 +553,7 @@ final class Async
                     return;
                 }
                 if (!$generator->valid()) {
+                    $done = true;
                     try {
                         $return = $generator->getReturn();
                     } catch(\Throwable $e) {
@@ -548,19 +561,30 @@ final class Async
                     }
                     return $defer->resolve($return);
                 }
-                return $defer->resolve( static::resolve( $generator, $depth++) );
+                if ($cancelled) {
+                    var_dump('stopping all remaining yields at depth'.$depth, $done);
+                    $done = true;
+                    return $defer->reject( new CancelException('Promise cancelled') );
+                    //return $defer->resolve(null);
+                }
+                return $defer->resolve( static::resolve( $generator, ++$depth) );
             })
-            ->otherwise(function ($e) use ($generator, $defer, $depth) {
+            ->otherwise(function ($e) use ($generator, $defer, $depth, &$cancelled) {
                 if ($generator->valid()) {
                     try {
                         $generator->throw($e);
                     } catch(\Throwable $e) {
+                        $done = true;
                         return $defer->reject($e);
                     }
-                    return $defer->resolve( static::resolve( $generator, $depth++) );
+                    if ($cancelled && $generator->valid()) {
+                        $done = true;
+                        return $defer->reject( new CancelException('Promise cancelled', 0, null, $e ));
+                    }
+                    return $defer->resolve( static::resolve( $generator, ++$depth) );
                 }
+                $done = true;
                 return $defer->reject($e);
-                // return $defer->resolve( static::resolve( $generator, $depth++) );
             });
         return $defer->promise();
     }
@@ -635,14 +659,14 @@ final class Async
     {
         if (is_a($gen, Closure::class)) {
             try {
-                $gen = static::resolve($gen(), $depth++);
+                $gen = static::resolve($gen(), ++$depth);
             } catch(\Exception $e) {
                 return new RejectedPromise($e);
             }
         }
         if (is_a($gen, Generator::class)) {
             try {
-                $gen = static::unwrapGenerator($gen, $depth++);
+                $gen = static::unwrapGenerator($gen, ++$depth);
             } catch(\Exception $e) {
                 return new RejectedPromise($e);
             }
@@ -673,14 +697,15 @@ final class Async
         if (count($functions) == 1 && is_array(current($functions))) {
             $functions = current($functions);
         }
-        $func = function () use ($functions) {
+        return static::resolve(function () use ($functions) {
             $rows = [];
             foreach ($functions as $pos => $function) {
-                $rows[$pos] = yield $function;
+                echo "SOLVING FUNCTION POS $pos\n";
+                $rows[$pos] = yield static::resolve($function, 1);
+                var_dump($rows[$pos]);
             }
             return $rows;
-        };
-        return static::resolve($func());
+        });
     }
 
 

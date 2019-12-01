@@ -1,14 +1,15 @@
 <?php
 
 use Choval\Async;
+use Choval\Async\Exception as AsyncException;
 use PHPUnit\Framework\TestCase;
 use React\EventLoop\Factory;
 use React\Promise;
-use Choval\Async\Exception as AsyncException;
 
 use React\Promise\Deferred;
 
-class TestResolveClass {
+class TestResolveClass
+{
 }
 
 class FunctionsTest extends TestCase
@@ -44,14 +45,14 @@ class FunctionsTest extends TestCase
         $i = 0;
         $defer = new Deferred();
         $promise = $defer->promise();
-        $loop->addTimer(0.5, function() use ($defer) {
+        $loop->addTimer(0.5, function () use ($defer) {
             $defer->resolve(true);
         });
-        $loop->addPeriodicTimer(0.1, function() use (&$i) {
+        $loop->addPeriodicTimer(0.1, function () use (&$i) {
             $i++;
         });
         $this->assertLessThanOrEqual(1, $i);
-        Async\wait( $promise , 1.2);
+        Async\wait($promise, 1.2);
         $this->assertGreaterThanOrEqual(1, $i);
     }
 
@@ -64,8 +65,8 @@ class FunctionsTest extends TestCase
         try {
             $res = Async\wait(Async\sleep(1), 0.5);
             $this->assertFalse(true);
-        } catch(\Exception $e) {
-            $this->assertInstanceOf( \React\Promise\Timer\TimeoutException::class, $e);
+        } catch (\Exception $e) {
+            $this->assertInstanceOf(\React\Promise\Timer\TimeoutException::class, $e);
             $this->assertStringContainsString('Wait', $e->getMessage());
         }
     }
@@ -157,17 +158,17 @@ class FunctionsTest extends TestCase
     {
         $func = function () {
             $i = 0;
-            while($i<3) {
+            while ($i < 3) {
                 yield Async\sleep(1);
                 $i++;
             }
             return $i;
         };
         $prom = Async\resolve($func);
-        static::$loop->addTimer(1, function() use ($prom) {
+        static::$loop->addTimer(1, function () use ($prom) {
             $prom->cancel();
         });
-        $res = Async\wait( $prom );
+        $res = Async\wait($prom);
         $this->assertLessThan(3, $res);
     }
 
@@ -207,8 +208,8 @@ class FunctionsTest extends TestCase
 
     public function testResolveWithNonExistingFunction()
     {
-        Async\wait(Async\resolve(function() {
-            yield Async\resolve(function() {
+        Async\wait(Async\resolve(function () {
+            yield Async\resolve(function () {
                 $this->expectException(\Throwable::class);
                 calling_non_existing_function();
             });
@@ -219,8 +220,8 @@ class FunctionsTest extends TestCase
 
     public function testResolveWithNonExistingClassMethod()
     {
-        Async\wait(Async\resolve(function() {
-            yield Async\resolve(function() {
+        Async\wait(Async\resolve(function () {
+            yield Async\resolve(function () {
                 $this->expectException(\Throwable::class);
                 TestResolveClass::non_existing_method();
             });
@@ -231,14 +232,14 @@ class FunctionsTest extends TestCase
 
     public function testExceptionInsideResolve()
     {
-        $res = Async\wait( Async\resolve(function() {
+        $res = Async\wait(Async\resolve(function () {
             $res = true;
             try {
                 yield Async\execute('sleep 2', 1);
                 $res = false;
-            } catch(\Exception $e) {
+            } catch (\Exception $e) {
                 echo "MESSAGE CAUGHT\n";
-                echo $e->getMessage()."\n";
+                echo $e->getMessage() . "\n";
             }
             $this->assertTrue($res);
             return $res;
@@ -251,7 +252,7 @@ class FunctionsTest extends TestCase
     public function testExceptionThrowInsideResolve()
     {
         $this->expectException(AsyncException::class);
-        $res = Async\wait( Async\resolve(function() {
+        $res = Async\wait(Async\resolve(function () {
             yield;
             throw new AsyncException('Oops');
             return 'FAIL';
@@ -263,8 +264,8 @@ class FunctionsTest extends TestCase
     public function testExceptionThrowInsideMultipleResolve()
     {
         $this->expectException(AsyncException::class);
-        $res = Async\wait( Async\resolve(function() {
-            yield Async\resolve(function() {
+        $res = Async\wait(Async\resolve(function () {
+            yield Async\resolve(function () {
                 yield;
                 throw new AsyncException('OopsMultiple');
                 return 'FAIL';
@@ -283,10 +284,18 @@ class FunctionsTest extends TestCase
     public function testChainResolve()
     {
         $calls = [
-            function() { return Async\execute('sleep 0.1 && echo 1'); },
-            function() { return Async\execute('sleep 0.1 && echo 2'); },
-            function() { return Async\execute('sleep 0.1 && echo 3'); },
-            function() { return Async\execute('sleep 0.1 && echo 4'); },
+            function () {
+                return Async\execute('sleep 0.1 && echo 1');
+            },
+            function () {
+                return Async\execute('sleep 0.1 && echo 2');
+            },
+            function () {
+                return Async\execute('sleep 0.1 && echo 3');
+            },
+            function () {
+                return Async\execute('sleep 0.1 && echo 4');
+            },
         ];
         $res = Async\chain_resolve($calls);
         $responses = Async\wait($res, 1);
@@ -356,14 +365,14 @@ class FunctionsTest extends TestCase
             return $i;
         };
         $promises = [];
-        for($i=0;$i<$limit;$i++) {
+        for ($i = 0;$i < $limit;$i++) {
             $promises[] = Async\async($func, [$i]);
         }
         $start = microtime(true);
-        $res = Async\wait( $promises );
+        $res = Async\wait($promises);
         $end = microtime(true);
-        $diff = $end-$start;
-        $this->assertLessThanOrEqual( ($limit/$factor) , $diff);
+        $diff = $end - $start;
+        $this->assertLessThanOrEqual(($limit / $factor), $diff);
         $this->assertEquals($limit, count($res));
     }
 
@@ -387,13 +396,13 @@ class FunctionsTest extends TestCase
         $i = 0;
         $defer = new Deferred();
         $promise = $defer->promise();
-        $loop->addTimer(1, function() use ($defer) {
+        $loop->addTimer(1, function () use ($defer) {
             $defer->resolve(true);
         });
-        $loop->futureTick(function() use (&$i) {
+        $loop->futureTick(function () use (&$i) {
             $res = Async\wait(
-                Async\async(function() use ($i) {
-                    for($e=0;$e<8;$e++) {
+                Async\async(function () use ($i) {
+                    for ($e = 0;$e < 8;$e++) {
                         usleep(0.1);
                         $i++;
                     }
@@ -403,7 +412,7 @@ class FunctionsTest extends TestCase
             $i = $res;
         });
         $this->assertLessThanOrEqual(1, $i);
-        Async\wait( $promise , 1.2);
+        Async\wait($promise, 1.2);
         $this->assertGreaterThanOrEqual(0.8, $i);
     }
 
@@ -446,8 +455,8 @@ class FunctionsTest extends TestCase
             }
             return $id;
         };
-        $retries = $times+1;
-        $res = Async\wait( Async\retry($func, $retries, 0.001, 'bad error') , 10 );
+        $retries = $times + 1;
+        $res = Async\wait(Async\retry($func, $retries, 0.001, 'bad error'), 10);
         $this->assertEquals($id, $res);
         $this->assertEquals(0, $times);
     }
@@ -459,15 +468,15 @@ class FunctionsTest extends TestCase
         $id = uniqid();
         $func = function () use (&$times, $id) {
             --$times;
-            return Async\async(function() use ($id, $times) {
+            return Async\async(function () use ($id, $times) {
                 if ($times) {
                     throw new \Exception('bad error async');
                 }
                 return $id;
             });
         };
-        $retries = $times+1;
-        $res = Async\wait( Async\retry($func, $retries, 0.1, 'bad error async') , 10);
+        $retries = $times + 1;
+        $res = Async\wait(Async\retry($func, $retries, 0.1, 'bad error async'), 10);
         $this->assertEquals($id, $res);
         $this->assertEquals(0, $times);
     }
@@ -476,16 +485,16 @@ class FunctionsTest extends TestCase
     public function testNestingNightmare()
     {
         $id = uniqid();
-        $func_a = function() use ($id) {
-            return Async\async(function() use ($id) {
+        $func_a = function () use ($id) {
+            return Async\async(function () use ($id) {
                 usleep(1);
                 return $id;
             });
         };
-        $func_b = function() use ($func_a) {
+        $func_b = function () use ($func_a) {
             return Async\wait($func_a);
         };
-        $res = Async\wait( Async\resolve($func_b) );
+        $res = Async\wait(Async\resolve($func_b));
         $this->assertEquals($id, $res);
     }
 
@@ -493,19 +502,19 @@ class FunctionsTest extends TestCase
     public function testBlockInsidePromise()
     {
         $id = uniqid();
-        $func_a = function() use ($id) {
-            yield Async\async(function() {
-              sleep(1);  
+        $func_a = function () use ($id) {
+            yield Async\async(function () {
+                sleep(1);
             });
             return $id;
         };
-        $func_b = function() use ($func_a) {
+        $func_b = function () use ($func_a) {
             return Async\wait($func_a);
         };
-        $func_c = function() use ($func_b) {
+        $func_c = function () use ($func_b) {
             return Async\wait($func_b);
         };
-        $res = Async\wait( $func_c );
+        $res = Async\wait($func_c);
         $this->assertEquals($id, $res);
     }
 
@@ -518,10 +527,10 @@ class FunctionsTest extends TestCase
             $defer->resolve(true);
         });
          */
-        return Async\wait(function() {
+        return Async\wait(function () {
             $defer = new Deferred();
             $promise = $defer->promise();
-            $this->expectException( AsyncException::class );
+            $this->expectException(AsyncException::class);
             $this->expectExceptionMessage('Timed out after 0.5 secs');
             $res = yield Async\timeout($promise, 0.5);
         }, 1);

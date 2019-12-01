@@ -1,11 +1,13 @@
 <?php
+
 namespace Choval\Async;
 
 use Choval\Async\Exception;
 
 class CancelException extends Exception
 {
-    public function __construct(Throwable $prev=null) {
+    public function __construct(Throwable $prev = null)
+    {
         $message = 'Promise cancelled';
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1024);
         $code = 0;
@@ -17,4 +19,3 @@ class CancelException extends Exception
         $this->prev = $prev;
     }
 }
-

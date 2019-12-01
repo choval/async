@@ -2,8 +2,8 @@
 
 namespace Choval\Async;
 
-use Choval\Async\Exception;
 use Choval\Async\CancelException;
+use Choval\Async\Exception;
 use Closure;
 use Clue\React\Block;
 use Evenement\EventEmitterInterface;
@@ -15,11 +15,11 @@ use React\EventLoop\LoopInterface;
 use React\Promise;
 use React\Promise\Deferred;
 
-use React\Promise\Timer\TimeoutException;
 use React\Promise\FulfilledPromise;
 use React\Promise\PromiseInterface;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
+use React\Promise\Timer\TimeoutException;
 
 use React\Stream\ReadableStreamInterface;
 
@@ -79,8 +79,8 @@ final class Async
     public static function addFork(string $id, PromiseInterface $promise)
     {
         static::$forks[$id] = $promise;
-        $promise->always(function() use ($id) {
-            unset( static::$forks[$id] );
+        $promise->always(function () use ($id) {
+            unset(static::$forks[$id]);
         });
     }
 
@@ -110,9 +110,9 @@ final class Async
     public static function waitFreeFork(LoopInterface $loop)
     {
         $limit = static::getForksLimit();
-        return static::resolve(function() use ($limit, $loop) {
-            $count = count( static::$forks );
-            while( count(static::$forks) >= $limit ) {
+        return static::resolve(function () use ($limit, $loop) {
+            $count = count(static::$forks);
+            while (count(static::$forks) >= $limit) {
                 yield static::sleepWithLoop($loop, 0.001);
             }
             return true;
@@ -169,24 +169,22 @@ final class Async
         }
         if (is_array($promise)) {
             $promises = [];
-            foreach ($promise as $k=>$v) {
+            foreach ($promise as $k => $v) {
                 $promises[$k] = static::resolve($v, 1);
             }
             $promise = Promise\all($promises);
-        }
-        else if (!is_a($promise, PromiseInterface::class)) {
+        } elseif (!is_a($promise, PromiseInterface::class)) {
             $promise = static::resolve($promise, 1);
         }
         $freq = 0.1;
         if (is_null($timeout)) {
-            while(true) {
+            while (true) {
                 try {
                     return Block\await($promise, $loop, $freq);
-                } catch(CancelException $e) {
+                } catch (CancelException $e) {
                     return;
-                } catch(TimeoutException $e) {
-                } 
-                catch (\Throwable $e) {
+                } catch (TimeoutException $e) {
+                } catch (\Throwable $e) {
                     $prev = $e->getPrevious();
                     if ($prev) {
                         throw $prev;
@@ -204,17 +202,16 @@ final class Async
         $limit = $timeout / $freq;
 
         $exit = false;
-        $loop->addTimer($timeout, function() use (&$exit) {
+        $loop->addTimer($timeout, function () use (&$exit) {
             $exit = true;
         });
-        while(!$exit) {
+        while (!$exit) {
             try {
                 return Block\await($promise, $loop, $freq);
-            } catch(CancelException $e) {
+            } catch (CancelException $e) {
                 return;
-            } catch(TimeoutException $e) {
-            }
-            catch (\Throwable $e) {
+            } catch (TimeoutException $e) {
+            } catch (\Throwable $e) {
                 $prev = $e->getPrevious();
                 if ($prev) {
                     throw $prev;
@@ -223,7 +220,7 @@ final class Async
                 }
             }
         }
-        $ef = new TimeoutException($timeout, 'Wait timed out in '.$timeout. ' secs', 408, $e->getPrevious());
+        $ef = new TimeoutException($timeout, 'Wait timed out in ' . $timeout . ' secs', 408, $e->getPrevious());
         throw $ef;
     }
 
@@ -260,7 +257,7 @@ final class Async
             $timeout = ini_get('max_execution_time');
         }
         $proc;
-        $defer = new Deferred(function() use (&$proc) {
+        $defer = new Deferred(function () use (&$proc) {
             if ($proc) {
                 $proc->terminate();
             }
@@ -268,7 +265,7 @@ final class Async
         $id = random_bytes(16);
         $trace = debug_backtrace();
         static::waitFreeFork($loop)->done(
-            function() use ($loop, $cmd, $timeout, $defer, $id, $trace, &$proc) {
+            function () use ($loop, $cmd, $timeout, $defer, $id, $trace, &$proc) {
                 static::addFork($id, $defer->promise());
                 $buffer = '';
                 $proc = new Process($cmd);
@@ -281,12 +278,12 @@ final class Async
                             $pipe->close();
                         }
                         $proc->terminate(\SIGKILL ?? 9);
-                        $err = new \RuntimeException('Process timed out in '.$timeout .' secs');
+                        $err = new \RuntimeException('Process timed out in ' . $timeout . ' secs');
                     });
                 }
                 $proc->start($loop);
                 $echo = false;
-                if(!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
+                if (!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
                     $echo = true;
                 }
                 $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
@@ -295,8 +292,8 @@ final class Async
                         $first = "  [ASYNC EXECUTE]  ";
                         $chunk = trim($chunk);
                         $lines = explode("\n", $chunk);
-                        foreach($lines as $line) {
-                            echo $first.$line."\n";
+                        foreach ($lines as $line) {
+                            echo $first . $line . "\n";
                         }
                     }
                 });
@@ -324,14 +321,15 @@ final class Async
                         return $defer->reject(new Exception('Process terminated with code: ' . $termSignal, $termSignal, $trace));
                     }
                     if ($exitCode) {
-                        return $defer->reject(new Exception('Process exited with code: ' . $exitCode."\n$buffer", $exitCode, $trace));
+                        return $defer->reject(new Exception('Process exited with code: ' . $exitCode . "\n$buffer", $exitCode, $trace));
                     }
                     $defer->resolve($buffer);
                 });
             },
-            function($e) use ($defer) {
+            function ($e) use ($defer) {
                 $defer->reject($e);
-            });
+            }
+        );
         return $defer->promise();
     }
 
@@ -352,19 +350,20 @@ final class Async
         } else {
             $promise = static::resolve($func);
         }
-        $timer = $loop->addTimer($timeout, function() use ($defer, $timeout) {
-            $defer->reject( new Exception('Timed out after '. $timeout .' secs') );
+        $timer = $loop->addTimer($timeout, function () use ($defer, $timeout) {
+            $defer->reject(new Exception('Timed out after ' . $timeout . ' secs'));
 //            $defer->reject( new TimeoutException($timeout, 'Timed out after ' . $timeout . ' secs') );
         });
         $promise->done(
-            function($res) use ($defer, $loop, $timer) {
+            function ($res) use ($defer, $loop, $timer) {
                 $loop->cancelTimer($timer);
                 $defer->resolve($res);
             },
-            function($e) use ($defer, $loop, $timer) {
+            function ($e) use ($defer, $loop, $timer) {
                 $loop->cancelTimer($timer);
                 $defer->reject($e);
-            });
+            }
+        );
         return $defer->promise();
     }
 
@@ -388,14 +387,14 @@ final class Async
         $cancelled = false;
         $timer;
         $i = $retries;
-        $defer = new Deferred(function() use (&$cancelled, &$timer, $loop, &$i) {
+        $defer = new Deferred(function () use (&$cancelled, &$timer, $loop, &$i) {
             // TODO
         });
         $trace = debug_backtrace();
         $last_e = new Exception('Failed retries', 0, $trace);
         $running = true;
-        $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type, &$cancelled) {
-            if($i < 0) {
+        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type, &$cancelled) {
+            if ($i < 0) {
                 $loop->cancelTimer($timer);
                 return $defer->reject($last_e);
             } else {
@@ -405,16 +404,16 @@ final class Async
                 $running = true;
                 static::resolve($func, 0, false)
                     ->done(
-                        function($res) use ($defer, $timer, $loop, &$running) {
+                        function ($res) use ($defer, $timer, $loop, &$running) {
                             $loop->cancelTimer($timer);
                             $defer->resolve($res);
                             $running = false;
                         },
-                        function($e) use ($defer, $loop, $timer, $type, &$last_e, &$running) {
+                        function ($e) use ($defer, $loop, $timer, $type, &$last_e, &$running) {
                             $last_e = $e;
                             $msg = $e->getMessage();
                             $ignore = false;
-                            foreach($type as $tmp) {
+                            foreach ($type as $tmp) {
                                 if ($tmp == $msg || is_a($e, $tmp)) {
                                     $ignore = true;
                                     break;
@@ -425,21 +424,22 @@ final class Async
                                 $defer->reject($e);
                             }
                             $running = false;
-                        });
+                        }
+                    );
             }
         });
         static::resolve($func, 0, false)
             ->done(
-                function($res) use ($defer, $timer, $loop, &$running) {
+                function ($res) use ($defer, $timer, $loop, &$running) {
                     $loop->cancelTimer($timer);
                     $defer->resolve($res);
                     $running = false;
                 },
-                function($e) use ($defer, $loop, $timer, $type, &$last_e, &$running) {
+                function ($e) use ($defer, $loop, $timer, $type, &$last_e, &$running) {
                     $last_e = $e;
                     $msg = $e->getMessage();
                     $ignore = false;
-                    foreach($type as $tmp) {
+                    foreach ($type as $tmp) {
                         if ($tmp == $msg || is_a($e, $tmp)) {
                             $ignore = true;
                             break;
@@ -450,7 +450,8 @@ final class Async
                         $defer->reject($e);
                     }
                     $running = false;
-                });
+                }
+            );
         return $defer->promise();
     }
 
@@ -469,7 +470,7 @@ final class Async
         $id = random_bytes(16);
         $trace = debug_backtrace();
         static::waitFreeFork($loop)->done(
-            function() use ($loop, $func, $args, $defer, $id, $trace) {
+            function () use ($loop, $func, $args, $defer, $id, $trace) {
                 static::addFork($id, $defer->promise());
                 $sockets = array();
                 $domain = (strtoupper(substr(PHP_OS, 0, 3)) == 'WIN' ? AF_INET : AF_UNIX);
@@ -532,7 +533,7 @@ final class Async
                         if ($written === false) {
                             exit(1);
                         }
-                    } catch(\Throwable $e) {
+                    } catch (\Throwable $e) {
                         static::flattenExceptionBacktrace($e);
                         $res = serialize($e);
                         $written = socket_write($sockets[0], $res, strlen($res));
@@ -543,9 +544,10 @@ final class Async
                     exit(0);
                 }
             },
-            function($e) use ($defer) {
+            function ($e) use ($defer) {
                 $defer->reject($e);
-            });
+            }
+        );
         return $defer->promise();
     }
 
@@ -554,12 +556,12 @@ final class Async
     /**
      * Unwraps a generator and solves yielded promises
      */
-    public static function unwrapGenerator(Generator $generator, int $depth=0, bool $cancellable = true)
+    public static function unwrapGenerator(Generator $generator, int $depth = 0, bool $cancellable = true)
     {
         $cancelled = false;
         $done = false;
         if ($cancellable) {
-            $defer = new Deferred(function($resolve, $reject) use (&$cancelled, $generator, $depth, &$done) {
+            $defer = new Deferred(function ($resolve, $reject) use (&$cancelled, $generator, $depth, &$done) {
                 if ($generator->valid() && !$done) {
                     $cancelled = true;
                 }
@@ -572,7 +574,7 @@ final class Async
             function ($res) use ($generator, $defer, $depth, &$cancelled, &$done, $cancellable) {
                 try {
                     $generator->send($res);
-                } catch(\Throwable $e) {
+                } catch (\Throwable $e) {
                     $done = true;
                     $defer->reject($e);
                     if ($generator->valid()) {
@@ -584,34 +586,35 @@ final class Async
                     $done = true;
                     try {
                         $return = $generator->getReturn();
-                    } catch(\Throwable $e) {
+                    } catch (\Throwable $e) {
                         return $defer->reject($e);
                     }
                     return $defer->resolve($return);
                 }
                 if ($cancelled) {
                     $done = true;
-                    return $defer->reject( new CancelException() );
+                    return $defer->reject(new CancelException());
                 }
-                return $defer->resolve( static::resolve( $generator, ++$depth, $cancellable) );
+                return $defer->resolve(static::resolve($generator, ++$depth, $cancellable));
             },
             function ($e) use ($generator, $defer, $depth, &$cancelled, $cancellable) {
                 if ($generator->valid()) {
                     try {
                         $generator->throw($e);
-                    } catch(\Throwable $e) {
+                    } catch (\Throwable $e) {
                         $done = true;
                         return $defer->reject($e);
                     }
                     if ($cancelled && $generator->valid()) {
                         $done = true;
-                        return $defer->reject( new CancelException($e) );
+                        return $defer->reject(new CancelException($e));
                     }
-                    return $defer->resolve( static::resolve( $generator, ++$depth, $cancellable) );
+                    return $defer->resolve(static::resolve($generator, ++$depth, $cancellable));
                 }
                 $done = true;
                 return $defer->reject($e);
-            });
+            }
+        );
         return $defer->promise();
     }
 
@@ -655,7 +658,7 @@ final class Async
 
             $stream->on('close', function () use ($resolve, &$buffer, &$type) {
                 if ($type == 'string') {
-                    return $resolve( implode('', $buffer) );
+                    return $resolve(implode('', $buffer));
                 }
                 $resolve($buffer);
             });
@@ -682,19 +685,19 @@ final class Async
      * - Promise
      * - Stream
      */
-    public static function resolve($gen, int $depth=0, bool $cancellable=true)
+    public static function resolve($gen, int $depth = 0, bool $cancellable = true)
     {
         if (is_a($gen, Closure::class)) {
             try {
                 $gen = static::resolve($gen(), ++$depth, $cancellable);
-            } catch(\Exception $e) {
+            } catch (\Exception $e) {
                 return new RejectedPromise($e);
             }
         }
         if (is_a($gen, Generator::class)) {
             try {
                 $gen = static::unwrapGenerator($gen, ++$depth, $cancellable);
-            } catch(\Exception $e) {
+            } catch (\Exception $e) {
                 return new RejectedPromise($e);
             }
         }
@@ -725,7 +728,7 @@ final class Async
             $functions = current($functions);
         }
         $cancelled = false;
-        $defer = new Deferred(function() use (&$cancelled) {
+        $defer = new Deferred(function () use (&$cancelled) {
             $cancelled = true;
         });
         return static::resolve(function () use ($functions, &$cancelled) {
@@ -745,14 +748,15 @@ final class Async
     /**
      * From: https://gist.github.com/nh-mike/fde9f69a57bc45c5b491d90fb2ee08df
      */
-    static function flattenExceptionBacktrace(\Throwable $exception) {
+    public static function flattenExceptionBacktrace(\Throwable $exception)
+    {
         if (is_a($exception, \Exception::class)) {
             $traceProperty = (new \ReflectionClass('Exception'))->getProperty('trace');
         } else {
             $traceProperty = (new \ReflectionClass('Error'))->getProperty('trace');
         }
         $traceProperty->setAccessible(true);
-        $flatten = function(&$value, $key) {
+        $flatten = function (&$value, $key) {
             if (is_a($value, Closure::class)) {
                 $closureReflection = new \ReflectionFunction($value);
                 $value = sprintf(
@@ -768,16 +772,16 @@ final class Async
         };
         $previousexception = $exception;
         do {
-            if ($previousexception === NULL) {
+            if ($previousexception === null) {
                 break;
             }
             $exception = $previousexception;
             $trace = $traceProperty->getValue($exception);
-            foreach($trace as &$call) {
+            foreach ($trace as &$call) {
                 array_walk_recursive($call['args'], $flatten);
             }
             $traceProperty->setValue($exception, $trace);
-        } while($previousexception = $exception->getPrevious());
+        } while ($previousexception = $exception->getPrevious());
         $traceProperty->setAccessible(false);
     }
 }

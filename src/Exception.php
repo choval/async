@@ -1,17 +1,18 @@
 <?php
+
 namespace Choval\Async;
 
-use Throwable;
 use Exception as RootException;
+use Throwable;
 
 class Exception extends RootException
 {
-
     protected $trace;
     protected $prev;
 
 
-    public function __construct(string $message = "", int $code=0, $trace=null, Throwable $prev=null) {
+    public function __construct(string $message = "", int $code = 0, $trace = null, Throwable $prev = null)
+    {
         if (is_null($trace)) {
             $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1024);
         } else {
@@ -36,12 +37,11 @@ class Exception extends RootException
     public function getAsyncTraceAsString(): string
     {
         $out = '';
-        foreach($this->trace as $pos=>$row) {
+        foreach ($this->trace as $pos => $row) {
             $out .= "#{$pos} {$row['file']}({$row['line']})";
             if (isset($row['class']) && isset($row['function'])) {
                 $out .= ": {$row['class']}\\{$row['function']}()";
-            }
-            else if (isset($row['function'])) {
+            } elseif (isset($row['function'])) {
                 $out .= ": {$row['function']}()";
             }
             $out .= "\n";

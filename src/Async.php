@@ -183,7 +183,6 @@ final class Async
                 try {
                     return Block\await($promise, $loop, $freq);
                 } catch(CancelException $e) {
-                    var_dump($e->getMessage());
                     return;
                 } catch(TimeoutException $e) {
                 }
@@ -242,11 +241,16 @@ final class Async
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
         }
-        $defer = new Deferred();
+        $proc;
+        $defer = new Deferred(function() use (&$proc) {
+            if ($proc) {
+                $proc->terminate();
+            }
+        });
         $id = random_bytes(16);
         $trace = debug_backtrace();
-        static::waitFreeFork($loop)
-            ->then(function() use ($loop, $cmd, $timeout, $defer, $id, $trace) {
+        static::waitFreeFork($loop)->done(
+            function() use ($loop, $cmd, $timeout, $defer, $id, $trace, &$proc) {
                 static::addFork($id, $defer->promise());
                 $buffer = '';
                 $proc = new Process($cmd);
@@ -306,8 +310,8 @@ final class Async
                     }
                     $defer->resolve($buffer);
                 });
-            })
-            ->otherwise(function($e) use ($defer) {
+            },
+            function($e) use ($defer) {
                 $defer->reject($e);
             });
         return $defer->promise();
@@ -334,15 +338,14 @@ final class Async
             $defer->reject( new Exception('Timed out after '. $timeout .' secs') );
 //            $defer->reject( new TimeoutException($timeout, 'Timed out after ' . $timeout . ' secs') );
         });
-        $promise
-            ->then(function($res) use ($defer) {
-                $defer->resolve($res);
-            })
-            ->otherwise(function($e) use ($defer) {
-                $defer->reject($e);
-            })
-            ->always(function() use ($timer, $loop) {
+        $promise->done(
+            function($res) use ($defer, $loop, $timer) {
                 $loop->cancelTimer($timer);
+                $defer->resolve($res);
+            },
+            function($e) use ($defer, $loop, $timer) {
+                $loop->cancelTimer($timer);
+                $defer->reject($e);
             });
         return $defer->promise();
     }
@@ -364,68 +367,72 @@ final class Async
         if (!is_array($type)) {
             $type = [$type];
         }
-        $defer = new Deferred();
+        $cancelled = false;
+        $timer;
         $i = $retries;
+        $defer = new Deferred(function() use (&$cancelled, &$timer, $loop, &$i) {
+            // TODO
+        });
         $trace = debug_backtrace();
         $last_e = new Exception('Failed retries', 0, $trace);
         $running = true;
-        $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type) {
-            if ($i >= 0) {
-                $i--;
-            } else {
+        $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type, &$cancelled) {
+            if($i < 0) {
                 $loop->cancelTimer($timer);
                 return $defer->reject($last_e);
+            } else {
+                $i--;
             }
             if (!$running) {
                 $running = true;
-                static::resolve($func)
-                    ->then(function($res) use ($defer, $timer, $loop) {
-                        $loop->cancelTimer($timer);
-                        $defer->resolve($res);
-                    })
-                    ->otherwise(function($e) use ($defer, $loop, $timer, $type, &$last_e) {
-                        $last_e = $e;
-                        $msg = $e->getMessage();
-                        $ignore = false;
-                        foreach($type as $tmp) {
-                            if ($tmp == $msg || is_a($e, $tmp)) {
-                                $ignore = true;
-                                break;
-                            }
-                        }
-                        if (!$ignore) {
+                static::resolve($func, 0, false)
+                    ->done(
+                        function($res) use ($defer, $timer, $loop, &$running) {
                             $loop->cancelTimer($timer);
-                            $defer->reject($e);
-                        }
-                    })
-                    ->always(function() use (&$running) {
-                        $running = false;
-                    });
+                            $defer->resolve($res);
+                            $running = false;
+                        },
+                        function($e) use ($defer, $loop, $timer, $type, &$last_e, &$running) {
+                            $last_e = $e;
+                            $msg = $e->getMessage();
+                            $ignore = false;
+                            foreach($type as $tmp) {
+                                if ($tmp == $msg || is_a($e, $tmp)) {
+                                    $ignore = true;
+                                    break;
+                                }
+                            }
+                            if (!$ignore) {
+                                $loop->cancelTimer($timer);
+                                $defer->reject($e);
+                            }
+                            $running = false;
+                        });
             }
         });
-        static::resolve($func)
-            ->then(function($res) use ($defer, $timer, $loop) {
-                $loop->cancelTimer($timer);
-                $defer->resolve($res);
-            })
-            ->otherwise(function($e) use ($defer, $loop, $timer, $type, &$last_e) {
-                $last_e = $e;
-                $msg = $e->getMessage();
-                $ignore = false;
-                foreach($type as $tmp) {
-                    if ($tmp == $msg || is_a($e, $tmp)) {
-                        $ignore = true;
-                        break;
-                    }
-                }
-                if (!$ignore) {
+        static::resolve($func, 0, false)
+            ->done(
+                function($res) use ($defer, $timer, $loop, &$running) {
                     $loop->cancelTimer($timer);
-                    $defer->reject($e);
-                }
-            })  
-            ->always(function() use (&$running) {
-                $running = false;
-            });
+                    $defer->resolve($res);
+                    $running = false;
+                },
+                function($e) use ($defer, $loop, $timer, $type, &$last_e, &$running) {
+                    $last_e = $e;
+                    $msg = $e->getMessage();
+                    $ignore = false;
+                    foreach($type as $tmp) {
+                        if ($tmp == $msg || is_a($e, $tmp)) {
+                            $ignore = true;
+                            break;
+                        }
+                    }
+                    if (!$ignore) {
+                        $loop->cancelTimer($timer);
+                        $defer->reject($e);
+                    }
+                    $running = false;
+                });
         return $defer->promise();
     }
 
@@ -443,8 +450,8 @@ final class Async
         $defer = new Deferred();
         $id = random_bytes(16);
         $trace = debug_backtrace();
-        static::waitFreeFork($loop)
-            ->then(function() use ($loop, $func, $args, $defer, $id, $trace) {
+        static::waitFreeFork($loop)->done(
+            function() use ($loop, $func, $args, $defer, $id, $trace) {
                 static::addFork($id, $defer->promise());
                 $sockets = array();
                 $domain = (strtoupper(substr(PHP_OS, 0, 3)) == 'WIN' ? AF_INET : AF_UNIX);
@@ -517,8 +524,8 @@ final class Async
                     }
                     exit(0);
                 }
-            })
-            ->otherwise(function($e) use ($defer) {
+            },
+            function($e) use ($defer) {
                 $defer->reject($e);
             });
         return $defer->promise();
@@ -529,19 +536,22 @@ final class Async
     /**
      * Unwraps a generator and solves yielded promises
      */
-    public static function unwrapGenerator(Generator $generator, int $depth=0)
+    public static function unwrapGenerator(Generator $generator, int $depth=0, bool $cancellable = true)
     {
         $value = $generator->current();
         $cancelled = false;
         $done = false;
-        $defer = new Deferred(function($resolve, $reject) use (&$cancelled, $generator, $depth, &$done) {
-            if ($generator->valid() && !$done) {
-                var_dump('CANCELLED AT DEPTH '.$depth);
-                $cancelled = true;
-            }
-        });
-        static::resolve($value, ++$depth)
-            ->then(function ($res) use ($generator, $defer, $depth, &$cancelled, &$done) {
+        if ($cancellable) {
+            $defer = new Deferred(function($resolve, $reject) use (&$cancelled, $generator, $depth, &$done) {
+                if ($generator->valid() && !$done) {
+                    $cancelled = true;
+                }
+            });
+        } else {
+            $defer = new Deferred();
+        }
+        static::resolve($value, ++$depth, $cancellable)->done(
+            function ($res) use ($generator, $defer, $depth, &$cancelled, &$done, $cancellable) {
                 try {
                     $generator->send($res);
                 } catch(\Throwable $e) {
@@ -562,14 +572,12 @@ final class Async
                     return $defer->resolve($return);
                 }
                 if ($cancelled) {
-                    var_dump('stopping all remaining yields at depth'.$depth, $done);
                     $done = true;
-                    return $defer->reject( new CancelException('Promise cancelled') );
-                    //return $defer->resolve(null);
+                    return $defer->reject( new CancelException() );
                 }
-                return $defer->resolve( static::resolve( $generator, ++$depth) );
-            })
-            ->otherwise(function ($e) use ($generator, $defer, $depth, &$cancelled) {
+                return $defer->resolve( static::resolve( $generator, ++$depth, $cancellable) );
+            },
+            function ($e) use ($generator, $defer, $depth, &$cancelled, $cancellable) {
                 if ($generator->valid()) {
                     try {
                         $generator->throw($e);
@@ -579,9 +587,9 @@ final class Async
                     }
                     if ($cancelled && $generator->valid()) {
                         $done = true;
-                        return $defer->reject( new CancelException('Promise cancelled', 0, null, $e ));
+                        return $defer->reject( new CancelException($e) );
                     }
-                    return $defer->resolve( static::resolve( $generator, ++$depth) );
+                    return $defer->resolve( static::resolve( $generator, ++$depth, $cancellable) );
                 }
                 $done = true;
                 return $defer->reject($e);
@@ -637,7 +645,7 @@ final class Async
             $reject(new Exception('Cancelled buffering', 0, $trace));
         });
 
-        return $promise->then(null, function ($error) use (&$buffer, &$bufferer, $stream, $type) {
+        return $promise->done(null, function ($error) use (&$buffer, &$bufferer, $stream, $type) {
             // promise rejected => clear buffer and buffering
             $buffer = [];
             $stream->removeListener('data', $bufferer);
@@ -655,18 +663,18 @@ final class Async
      * - Promise
      * - Stream
      */
-    public static function resolve($gen, int $depth=0)
+    public static function resolve($gen, int $depth=0, bool $cancellable=true)
     {
         if (is_a($gen, Closure::class)) {
             try {
-                $gen = static::resolve($gen(), ++$depth);
+                $gen = static::resolve($gen(), ++$depth, $cancellable);
             } catch(\Exception $e) {
                 return new RejectedPromise($e);
             }
         }
         if (is_a($gen, Generator::class)) {
             try {
-                $gen = static::unwrapGenerator($gen, ++$depth);
+                $gen = static::unwrapGenerator($gen, ++$depth, $cancellable);
             } catch(\Exception $e) {
                 return new RejectedPromise($e);
             }
@@ -697,15 +705,20 @@ final class Async
         if (count($functions) == 1 && is_array(current($functions))) {
             $functions = current($functions);
         }
-        return static::resolve(function () use ($functions) {
+        $cancelled = false;
+        $defer = new Deferred(function() use (&$cancelled) {
+            $cancelled = true;
+        });
+        return static::resolve(function () use ($functions, &$cancelled) {
             $rows = [];
             foreach ($functions as $pos => $function) {
-                echo "SOLVING FUNCTION POS $pos\n";
+                if ($cancelled) {
+                    break;
+                }
                 $rows[$pos] = yield static::resolve($function, 1);
-                var_dump($rows[$pos]);
             }
             return $rows;
-        });
+        }, 0, false);
     }
 
 

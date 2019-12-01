@@ -283,14 +283,13 @@ class FunctionsTest extends TestCase
     public function testChainResolve()
     {
         $calls = [
-            Async\execute('sleep 0.1 && echo 1'),
-            Async\execute('sleep 0.1 && echo 2'),
-            Async\execute('sleep 0.1 && echo 3'),
-            Async\execute('sleep 0.1 && echo 4'),
+            function() { return Async\execute('sleep 0.1 && echo 1'); },
+            function() { return Async\execute('sleep 0.1 && echo 2'); },
+            function() { return Async\execute('sleep 0.1 && echo 3'); },
+            function() { return Async\execute('sleep 0.1 && echo 4'); },
         ];
         $res = Async\chain_resolve($calls);
         $responses = Async\wait($res, 1);
-        var_dump('async wait responses', $responses);
         $this->assertEquals('1', trim($responses[0]));
         $this->assertEquals('2', trim($responses[1]));
         $this->assertEquals('3', trim($responses[2]));

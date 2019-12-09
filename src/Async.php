@@ -11,6 +11,7 @@ use Generator;
 use React\ChildProcess\Process;
 use React\EventLoop\Factory;
 use React\EventLoop\LoopInterface;
+use React\Filesystem\Filesystem;
 use React\Promise;
 use React\Promise\Deferred;
 use React\Promise\FulfilledPromise;
@@ -18,7 +19,6 @@ use React\Promise\PromiseInterface;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
 use React\Promise\Timer\TimeoutException;
-use React\Filesystem\Filesystem;
 use React\Stream\ReadableStreamInterface;
 
 final class Async
@@ -789,11 +789,11 @@ final class Async
     /**
      * File put contents
      */
-    public static function filePutContents(string $file, $contents, $append=false)
+    public static function filePutContents(string $file, $contents, $append = false)
     {
         return static::filePutContentsWithLoop(static::getLoop(), $file, $contents, $append);
     }
-    public static function filePutContentsWithLoop(LoopInterface $loop, string $file, $contents, $append=false)
+    public static function filePutContentsWithLoop(LoopInterface $loop, string $file, $contents, $append = false)
     {
         $fs = Filesystem::create($loop);
         if ($append) {
@@ -807,11 +807,11 @@ final class Async
     /**
      * File get contents
      */
-    public static function fileGetContents(string $file, $offset=0, $length=null)
+    public static function fileGetContents(string $file, $offset = 0, $length = null)
     {
         return static::fileGetContentsWithLoop(static::getLoop(), $file, $offset, $length);
     }
-    public static function fileGetContentsWithLoop(LoopInterface $loop, string $file, $offset=0, $length=null)
+    public static function fileGetContentsWithLoop(LoopInterface $loop, string $file, $offset = 0, $length = null)
     {
         $fs = Filesystem::create($loop);
         return $fs->file($file)->getContents($offset, $length);

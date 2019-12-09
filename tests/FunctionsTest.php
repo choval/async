@@ -539,7 +539,7 @@ class FunctionsTest extends TestCase
 
     public function testFilePutGetContents()
     {
-        return Async\wait(function() {
+        return Async\wait(function () {
             $random = bin2hex(random_bytes(16));
             $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'async.tmp';
             file_put_contents($tmp, $random);
@@ -547,12 +547,12 @@ class FunctionsTest extends TestCase
             $this->assertEquals($random, $contents);
 
             $partial = yield Async\file_get_contents($tmp, 1, 6);
-            $this->assertEquals( substr($random, 1, 6), $partial);
+            $this->assertEquals(substr($random, 1, 6), $partial);
 
             yield Async\file_put_contents($tmp, 'TEST', true);
             $contents = file_get_contents($tmp);
             $this->assertNotEquals($random, $contents);
-            $this->assertEquals($random.'TEST', $contents);
+            $this->assertEquals($random . 'TEST', $contents);
 
             unlink($tmp);
         });

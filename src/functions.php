@@ -304,4 +304,3 @@ function file_put_contents()
     }
     return call_user_func_array([Async::class, 'filePutContentsWithLoop'], $args);
 }
-

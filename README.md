@@ -345,6 +345,27 @@ Async\timeout($func, 1.5)
     });
 ```
 
+### file\_put\_contents and file\_get\_contents
+
+These use [ReactPHP Filesystem](https://github.com/reactphp/filesystem) in the background, they are just shortcuts.
+
+```php
+$file = 'file.test';
+Async\file_put_contents($file, 'my file contents')
+    ->then(function() use ($file) {
+        // Bool true to append
+        return Async\file_put_contents($file, ' with some extra', true);
+    })
+    ->then(function() use ($file) {
+        // Offset and length can also be passed as argument
+        return Async\file_get_contents($file);
+    })
+    ->then(function($res) {
+        echo $res;
+        // Prints 'my file contents with some extra';
+    });
+```
+
 ## License
 
 MIT, see LICENSE

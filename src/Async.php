@@ -807,13 +807,42 @@ final class Async
     /**
      * File get contents
      */
-    public static function fileGetContents(string $file, $offset = 0, $length = null)
+    public static function fileGetContents(string $path, $offset = 0, $length = null)
     {
-        return static::fileGetContentsWithLoop(static::getLoop(), $file, $offset, $length);
+        return static::fileGetContentsWithLoop(static::getLoop(), $path, $offset, $length);
     }
-    public static function fileGetContentsWithLoop(LoopInterface $loop, string $file, $offset = 0, $length = null)
+    public static function fileGetContentsWithLoop(LoopInterface $loop, string $path, $offset = 0, $length = null)
     {
         $fs = Filesystem::create($loop);
-        return $fs->file($file)->getContents($offset, $length);
+        $file = $fs->file($path);
+        return $file->exists()
+            ->then(function () use ($file, $offset, $length) {
+                return $file->getContents($offset, $length);
+            })
+            ->otherwise(function () {
+                return null;
+            });
+    }
+
+
+
+    /**
+     * File exists
+     */
+    public static function fileExists(string $path)
+    {
+        return static::fileExistsWithLoop(static::getLoop(), $path);
+    }
+    public static function fileExistsWithLoop(LoopInterface $loop, string $path)
+    {
+        $fs = Filesystem::create($loop);
+        $file = $fs->file($path);
+        return $file->exists()
+            ->then(function () {
+                return true;
+            })
+            ->otherwise(function () {
+                return false;
+            });
     }
 }

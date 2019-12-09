@@ -304,3 +304,18 @@ function file_put_contents()
     }
     return call_user_func_array([Async::class, 'filePutContentsWithLoop'], $args);
 }
+
+
+/**
+ *
+ */
+function file_exists()
+{
+    $args = func_get_args();
+    $first = current($args);
+    if (!($first instanceof LoopInterface)) {
+        $loop = Async::getLoop();
+        array_unshift($args, $loop);
+    }
+    return call_user_func_array([Async::class, 'fileExistsWithLoop'], $args);
+}

@@ -21,7 +21,8 @@
         "php": "^7.2",
         "clue/block-react": "^1.",
         "react/promise-stream": "^1.",
-        "react/child-process": "^0.6"
+        "react/child-process": "^0.6",
+        "react/filesystem": "^0.1.1"
     },
     "require-dev": {
         "symplify/easy-coding-standard": "^6.0",

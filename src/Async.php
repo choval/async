@@ -7,20 +7,18 @@ use Choval\Async\Exception;
 use Closure;
 use Clue\React\Block;
 use Evenement\EventEmitterInterface;
-
 use Generator;
 use React\ChildProcess\Process;
 use React\EventLoop\Factory;
 use React\EventLoop\LoopInterface;
 use React\Promise;
 use React\Promise\Deferred;
-
 use React\Promise\FulfilledPromise;
 use React\Promise\PromiseInterface;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
 use React\Promise\Timer\TimeoutException;
-
+use React\Filesystem\Filesystem;
 use React\Stream\ReadableStreamInterface;
 
 final class Async
@@ -189,7 +187,7 @@ final class Async
                     if ($prev) {
                         throw $prev;
                     } else {
-                        throw new Exception($e->getMessage(), $e->getCode(), $e->getTrace(), $e);
+                        throw $e;
                     }
                 }
             }
@@ -216,7 +214,7 @@ final class Async
                 if ($prev) {
                     throw $prev;
                 } else {
-                    throw new Exception($e->getMessage(), $e->getCode(), $e->getTrace(), $e);
+                    throw $e;
                 }
             }
         }
@@ -286,6 +284,7 @@ final class Async
                 if (!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
                     $echo = true;
                 }
+                // Writes buffer to a file if it gets too large
                 $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
                     $buffer .= $chunk;
                     if ($echo) {
@@ -783,5 +782,38 @@ final class Async
             $traceProperty->setValue($exception, $trace);
         } while ($previousexception = $exception->getPrevious());
         $traceProperty->setAccessible(false);
+    }
+
+
+
+    /**
+     * File put contents
+     */
+    public static function filePutContents(string $file, $contents, $append=false)
+    {
+        return static::filePutContentsWithLoop(static::getLoop(), $file, $contents, $append);
+    }
+    public static function filePutContentsWithLoop(LoopInterface $loop, string $file, $contents, $append=false)
+    {
+        $fs = Filesystem::create($loop);
+        if ($append) {
+            return $fs->file($file)->appendContents($contents);
+        }
+        return $fs->file($file)->putContents($contents);
+    }
+
+
+
+    /**
+     * File get contents
+     */
+    public static function fileGetContents(string $file, $offset=0, $length=null)
+    {
+        return static::fileGetContentsWithLoop(static::getLoop(), $file, $offset, $length);
+    }
+    public static function fileGetContentsWithLoop(LoopInterface $loop, string $file, $offset=0, $length=null)
+    {
+        $fs = Filesystem::create($loop);
+        return $fs->file($file)->getContents($offset, $length);
     }
 }

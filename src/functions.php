@@ -270,3 +270,38 @@ function timeout()
     }
     return call_user_func_array([Async::class, 'timeoutWithLoop'], $args);
 }
+
+
+/**
+ * File get contents
+ * For more advanced use of files see:
+ * https://github.com/reactphp/filesystem
+ */
+function file_get_contents()
+{
+    $args = func_get_args();
+    $first = current($args);
+    if (!($first instanceof LoopInterface)) {
+        $loop = Async::getLoop();
+        array_unshift($args, $loop);
+    }
+    return call_user_func_array([Async::class, 'fileGetContentsWithLoop'], $args);
+}
+
+
+/**
+ * File put contents
+ * For more advanced use of files see:
+ * https://github.com/reactphp/filesystem
+ */
+function file_put_contents()
+{
+    $args = func_get_args();
+    $first = current($args);
+    if (!($first instanceof LoopInterface)) {
+        $loop = Async::getLoop();
+        array_unshift($args, $loop);
+    }
+    return call_user_func_array([Async::class, 'filePutContentsWithLoop'], $args);
+}
+

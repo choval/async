@@ -161,7 +161,6 @@ final class Async
     {
         $promise = static::resolve($promise);
         $defer = new Deferred(function ($resolve, $reject) use ($promise) {
-            echo "syncWithLoop received cancel\n";
             $promise->cancel();
             $reject(new CancelException());
         });
@@ -521,7 +520,6 @@ final class Async
     {
         $promise = static::resolve($generator->current());
         $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
-            echo "unwrapGenerator received cancel\n";
             $promise->cancel();
             // $reject(new CancelException());
             $generator->throw(new CancelException());
@@ -669,7 +667,6 @@ final class Async
             return new FulfilledPromise($gen);
         }
         $defer = new Deferred(function ($resolve, $reject) use ($prom) {
-            echo "resolve received cancel\n";
             $prom->cancel();
             $reject(new CancelException());
         });

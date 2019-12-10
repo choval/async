@@ -52,7 +52,7 @@ class FunctionsTest extends TestCase
             $i++;
         });
         $this->assertLessThanOrEqual(1, $i);
-        Async\wait($promise, 1.2);
+        Async\wait($promise, 1);
         $this->assertGreaterThanOrEqual(1, $i);
     }
 
@@ -62,13 +62,8 @@ class FunctionsTest extends TestCase
      */
     public function testSyncTimeout()
     {
-        try {
-            $res = Async\wait(Async\sleep(1), 0.5);
-            $this->assertFalse(true);
-        } catch (\Exception $e) {
-            $this->assertInstanceOf(\React\Promise\Timer\TimeoutException::class, $e);
-            $this->assertStringContainsString('Wait', $e->getMessage());
-        }
+        $this->expectException(\React\Promise\Timer\TimeoutException::class);
+        $res = Async\wait(Async\sleep(1), 0.5);
     }
 
 
@@ -161,6 +156,7 @@ class FunctionsTest extends TestCase
             while ($i < 3) {
                 yield Async\sleep(1);
                 $i++;
+                echo "$i\n";
             }
             return $i;
         };
@@ -170,6 +166,20 @@ class FunctionsTest extends TestCase
         });
         $res = Async\wait($prom);
         $this->assertLessThan(3, $res);
+    }
+
+
+
+    public function testResolveNoCancelBeforeTimeout()
+    {
+        function a() {
+            return Async\resolve(function() {
+                yield Async\sleep(1);
+                return true;
+            });
+        }
+        $res = Async\wait(a(), 2);
+        $this->assertTrue($res);
     }
 
 

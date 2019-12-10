@@ -174,44 +174,29 @@ final class Async
         } elseif (!is_a($promise, PromiseInterface::class)) {
             $promise = static::resolve($promise, 1);
         }
-        $freq = 0.1;
-        if (is_null($timeout)) {
-            while (true) {
-                try {
-                    return Block\await($promise, $loop, $freq);
-                } catch (CancelException $e) {
-                    return;
-                } catch (TimeoutException $e) {
-                } catch (\Throwable $e) {
-                    $prev = $e->getPrevious();
-                    if ($prev) {
-                        throw $prev;
-                    } else {
-                        throw $e;
-                    }
-                }
-            }
-        }
-
-        $freq = $timeout / 100;
-        if ($freq < 0.01) {
-            $freq = 0.01;
-        }
-        $limit = $timeout / $freq;
-
         $exit = false;
-        $loop->addTimer($timeout, function () use (&$exit) {
-            $exit = true;
-        });
+        $freq = 0.1;
+        if ($timeout) {
+            $freq = $timeout / 100;
+            if ($freq < 0.01) {
+                $freq = 0.01;
+            }
+            $loop->addTimer($timeout, function () use (&$exit) {
+                $exit = true;
+            });
+        }
         while (!$exit) {
+            unset($e);
             try {
                 return Block\await($promise, $loop, $freq);
             } catch (CancelException $e) {
+                unset($e);
                 return;
             } catch (TimeoutException $e) {
             } catch (\Throwable $e) {
                 $prev = $e->getPrevious();
                 if ($prev) {
+                    unset($e);
                     throw $prev;
                 } else {
                     throw $e;

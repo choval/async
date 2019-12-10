@@ -1,8 +1,8 @@
 <?php
 
 use Choval\Async;
-use Choval\Async\Exception as AsyncException;
 use Choval\Async\CancelException;
+use Choval\Async\Exception as AsyncException;
 use PHPUnit\Framework\TestCase;
 use React\EventLoop\Factory;
 use React\Promise;
@@ -150,7 +150,7 @@ class FunctionsTest extends TestCase
 
     public function testWaitWithExecuteInsideResolve()
     {
-        $ab = Async\resolve(function() {
+        $ab = Async\resolve(function () {
             yield Async\sleep(1);
             $res = yield Async\execute('echo ok');
             return $res;
@@ -162,31 +162,34 @@ class FunctionsTest extends TestCase
 
     public function testResolveCancel()
     {
-        $func = function () {
-            $i = 0;
+        $i = 0;
+        $func = function () use (&$i) {
             while ($i < 3) {
-                yield Async\sleep(1);
+                yield Async\sleep(0.5);
                 $i++;
                 echo "testResolveCancel $i\n";
             }
-            throw new \Exception('This should never be reached');
+            // throw new \Exception('This should never be reached');
             return $i;
         };
         $prom = Async\resolve($func);
-        static::$loop->addTimer(1, function () use ($prom) {
+        static::$loop->addTimer(0.5, function () use ($prom) {
+            echo "Cancel sent\n";
             $prom->cancel();
         });
         $this->expectException(CancelException::class);
         $res = Async\wait($prom);
         $this->assertLessThan(3, $res);
+        $this->assertLessThan(3, $i);
     }
 
 
 
     public function testResolveNoCancelBeforeTimeout()
     {
-        function a() {
-            return Async\resolve(function() {
+        function a()
+        {
+            return Async\resolve(function () {
                 yield Async\sleep(1);
                 return true;
             });
@@ -554,7 +557,7 @@ class FunctionsTest extends TestCase
         $promise = $defer->promise();
         $this->expectException(AsyncException::class);
         $this->expectExceptionMessage('Timed out after 0.5 secs');
-        $res = Async\wait( Async\timeout($promise, 0.5), 1);
+        $res = Async\wait(Async\timeout($promise, 0.5), 1);
     }
 
 

@@ -2,6 +2,7 @@
 
 use Choval\Async;
 use Choval\Async\Exception as AsyncException;
+use Choval\Async\CancelException;
 use PHPUnit\Framework\TestCase;
 use React\EventLoop\Factory;
 use React\Promise;
@@ -121,7 +122,6 @@ class FunctionsTest extends TestCase
             return 'yield+' . $var;
         };
         $res = Async\wait(Async\resolve($func()));
-
         $this->assertEquals('yield+' . $rand, trim($res));
 
         $ab = function () {
@@ -142,11 +142,22 @@ class FunctionsTest extends TestCase
         $this->assertEquals([1, 2, 3, 4, 5, 6], $res);
 
         $res = Async\wait(Async\resolve(function () use ($ab) {
-            return $ab;
+            return yield $ab();
         }));
         $this->assertEquals([1, 2, 3, 4, 5, 6], $res);
     }
 
+
+    public function testWaitWithExecuteInsideResolve()
+    {
+        $ab = Async\resolve(function() {
+            yield Async\sleep(1);
+            $res = yield Async\execute('echo ok');
+            return $res;
+        });
+        $out = Async\wait($ab, 2);
+        $this->assertEquals('ok', trim($out));
+    }
 
 
     public function testResolveCancel()
@@ -156,14 +167,16 @@ class FunctionsTest extends TestCase
             while ($i < 3) {
                 yield Async\sleep(1);
                 $i++;
-                echo "$i\n";
+                echo "testResolveCancel $i\n";
             }
+            throw new \Exception('This should never be reached');
             return $i;
         };
         $prom = Async\resolve($func);
         static::$loop->addTimer(1, function () use ($prom) {
             $prom->cancel();
         });
+        $this->expectException(CancelException::class);
         $res = Async\wait($prom);
         $this->assertLessThan(3, $res);
     }
@@ -502,7 +515,7 @@ class FunctionsTest extends TestCase
             });
         };
         $func_b = function () use ($func_a) {
-            return Async\wait($func_a);
+            return Async\wait($func_a());
         };
         $res = Async\wait(Async\resolve($func_b));
         $this->assertEquals($id, $res);
@@ -519,12 +532,12 @@ class FunctionsTest extends TestCase
             return $id;
         };
         $func_b = function () use ($func_a) {
-            return Async\wait($func_a);
+            return Async\wait(Async\resolve($func_a));
         };
         $func_c = function () use ($func_b) {
-            return Async\wait($func_b);
+            return Async\wait($func_b());
         };
-        $res = Async\wait($func_c);
+        $res = Async\wait($func_c());
         $this->assertEquals($id, $res);
     }
 
@@ -537,33 +550,22 @@ class FunctionsTest extends TestCase
             $defer->resolve(true);
         });
          */
-        return Async\wait(function () {
-            $defer = new Deferred();
-            $promise = $defer->promise();
-            $this->expectException(AsyncException::class);
-            $this->expectExceptionMessage('Timed out after 0.5 secs');
-            $res = yield Async\timeout($promise, 0.5);
-        }, 1);
+        $defer = new Deferred();
+        $promise = $defer->promise();
+        $this->expectException(AsyncException::class);
+        $this->expectExceptionMessage('Timed out after 0.5 secs');
+        $res = Async\wait( Async\timeout($promise, 0.5), 1);
     }
 
 
-    public function testFilePutGetContents()
+    public function testFileGetContents()
     {
-        return Async\wait(function () {
+        Async\wait(function () {
             $random = bin2hex(random_bytes(16));
             $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'async.tmp';
             file_put_contents($tmp, $random);
             $contents = yield Async\file_get_contents($tmp);
             $this->assertEquals($random, $contents);
-
-            $partial = yield Async\file_get_contents($tmp, 1, 6);
-            $this->assertEquals(substr($random, 1, 6), $partial);
-
-            yield Async\file_put_contents($tmp, 'TEST', true);
-            $contents = file_get_contents($tmp);
-            $this->assertNotEquals($random, $contents);
-            $this->assertEquals($random . 'TEST', $contents);
-
             unlink($tmp);
         });
     }

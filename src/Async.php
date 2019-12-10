@@ -159,6 +159,7 @@ final class Async
     }
     public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null)
     {
+        /*
         $promise = static::resolve($promise);
         $defer = new Deferred(function ($resolve, $reject) use ($promise) {
             $promise->cancel();
@@ -172,8 +173,8 @@ final class Async
             });
         } else {
             $defer->resolve($promise);
-        }
-        return Block\await($defer->promise(), $loop, $timeout);
+        }*/
+        return Block\await(static::resolve($promise), $loop, $timeout); // defer->promise(), $loop, $timeout);
     }
 
 
@@ -187,9 +188,14 @@ final class Async
     }
     public static function sleepWithLoop(LoopInterface $loop, float $time)
     {
-        // TODO: Canceller
-        $defer = new Deferred();
-        $loop->addTimer($time, function ($timer) use ($defer, $time) {
+        $timer;
+        $defer = new Deferred(function ($resolve, $reject) use (&$timer, $loop) {
+            if ($timer) {
+                $loop->cancelTimer($timer);
+            }
+            $resolve();
+        });
+        $timer = $loop->addTimer($time, function ($timer) use ($defer, $time) {
             $defer->resolve($time);
         });
         return $defer->promise();
@@ -206,7 +212,7 @@ final class Async
     }
     public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0)
     {
-        // TODO: Executewith loop cannot be cancelled
+        // TODO: Check cancelling test
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
         }
@@ -345,13 +351,14 @@ final class Async
         $cancelled = false;
         $timer;
         $i = $retries;
-        $defer = new Deferred(function () use (&$cancelled, &$timer, $loop, &$i) {
-            // TODO
+        $defer = new Deferred(function ($resolve, $reject) use (&$cancelled, &$timer, $loop, &$i) {
+            $i = 0;
+            $reject(new CancelException());
         });
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
         $last_e = new Exception('Failed retries', 0, $trace);
-        $running = true;
-        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type, &$cancelled) {
+        $running = false;
+        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type, &$cancelled, &$trace) {
             if ($i < 0) {
                 $loop->cancelTimer($timer);
                 return $defer->reject($last_e);
@@ -360,32 +367,16 @@ final class Async
             }
             if (!$running) {
                 $running = true;
-                static::resolve($func, 0, false)
-                    ->done(
-                        function ($res) use ($defer, $timer, $loop, &$running) {
-                            $loop->cancelTimer($timer);
-                            $defer->resolve($res);
-                            $running = false;
-                        },
-                        function ($e) use ($defer, $loop, $timer, $type, &$last_e, &$running) {
-                            $last_e = $e;
-                            $msg = $e->getMessage();
-                            $ignore = false;
-                            foreach ($type as $tmp) {
-                                if ($tmp == $msg || is_a($e, $tmp)) {
-                                    $ignore = true;
-                                    break;
-                                }
-                            }
-                            if (!$ignore) {
-                                $loop->cancelTimer($timer);
-                                $defer->reject($e);
-                            }
-                            $running = false;
-                        }
-                    );
+                static::retryResolve($func, $defer, $timer, $loop, $running, $trace, $last_e, $type);
             }
         });
+        static::retryResolve($func, $defer, $timer, $loop, $running, $trace, $last_e, $type);
+        return $defer->promise();
+    }
+    // This is nasty, but im burnout and the pending list keeps growing
+    private static function retryResolve($func, $defer, $timer, $loop, &$running, &$trace, &$last_e, $type)
+    {
+        $running = true;
         static::resolve($func)
             ->done(
                 function ($res) use ($defer, $timer, $loop, &$running, &$trace) {
@@ -412,7 +403,6 @@ final class Async
                     unset($trace);
                 }
             );
-        return $defer->promise();
     }
 
 
@@ -757,7 +747,7 @@ final class Async
     }
     public static function filePutContentsWithLoop(LoopInterface $loop, string $file, $contents, $append = false)
     {
-        // TODO Append and clear zero
+        // TODO: Append and clear zero
         $fs = Filesystem::create($loop);
         if ($append) {
             return $fs->file($file)->appendContents($contents);
@@ -776,7 +766,7 @@ final class Async
     }
     public static function fileGetContentsWithLoop(LoopInterface $loop, string $path, $offset = 0, $length = null)
     {
-        // TODO RANGEs
+        // TODO: RANGEs
         $fs = Filesystem::create($loop);
         $file = $fs->file($path);
         return $file->exists()

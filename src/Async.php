@@ -159,22 +159,15 @@ final class Async
     }
     public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null)
     {
-        /*
-        $promise = static::resolve($promise);
-        $defer = new Deferred(function ($resolve, $reject) use ($promise) {
-            $promise->cancel();
-            $reject(new CancelException());
-        });
-        if (is_a($promise, PromiseInterface::class)) {
-            $promise->then(function ($res) use ($defer) {
-                $defer->resolve($res);
-            }, function ($e) use ($defer) {
-                $defer->reject($e);
-            });
-        } else {
-            $defer->resolve($promise);
-        }*/
-        return Block\await(static::resolve($promise), $loop, $timeout); // defer->promise(), $loop, $timeout);
+        try {
+            $res = Block\await(static::resolve($promise), $loop, $timeout);
+        } catch(\Throwable $e) {
+            if (is_a( $e, \UnexpectedValueException::class)) {
+                $e = $e->getPrevious();
+            }
+            throw $e;
+        }
+        return $res;
     }
 
 

@@ -235,6 +235,7 @@ final class Async
                     });
                 }
                 $proc->start($loop);
+                $pid = $proc->getPid();
                 $echo = false;
                 if (!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
                     $echo = true;
@@ -254,18 +255,14 @@ final class Async
                 $proc->stdout->on('error', function (\Exception $e) use (&$err) {
                     $err = $e;
                 });
-                $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc, $id, $trace) {
+                $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc, $id, $trace, $pid) {
                     static::removeFork($id);
                     $proc->stdout->close();
                     if ($timer) {
                         $loop->cancelTimer($timer);
                     }
                     // Clears any hanging processes
-                    /*
-                    $loop->addTimer(1, function () {
-                        pcntl_waitpid(-1, $status, \WNOHANG);
-                    });
-                     */
+                    pcntl_waitpid($pid, $status, \WNOHANG);
                     if ($err) {
                         $msg = $err->getMessage();
                         $e = new Exception($msg, $termSignal, $trace, $err);

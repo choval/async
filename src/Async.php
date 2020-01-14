@@ -740,9 +740,14 @@ final class Async
         // TODO: Append and clear zero
         $fs = Filesystem::create($loop);
         if ($append) {
-            return $fs->file($file)->appendContents($contents);
+            $prom = $fs->file($file)->appendContents($contents);
+        } else {
+            $prom = $fs->file($file)->putContents($contents);
         }
-        return $fs->file($file)->putContents($contents);
+        return $prom
+            ->then(function () use ($file) {
+                return $file;
+            });
     }
 
 

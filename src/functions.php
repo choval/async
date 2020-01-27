@@ -389,3 +389,28 @@ function rmdir()
 {
     return Async::call('rmdir', func_get_args());
 }
+
+function scandir()
+{
+    return Async::call('scandir', func_get_args());
+}
+
+function glob()
+{
+    return Async::call('glob', func_get_args());
+}
+
+
+/**
+ * Recursive glob
+ */
+function rglob()
+{
+    $args = func_get_args();
+    $first = current($args);
+    if (!($first instanceof LoopInterface)) {
+        $loop = Async::getLoop();
+        array_unshift($args, $loop);
+    }
+    return call_user_func_array([Async::class, 'rglobWithLoop'], $args);
+}

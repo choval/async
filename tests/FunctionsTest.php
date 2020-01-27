@@ -609,4 +609,22 @@ class FunctionsTest extends TestCase
             $this->assertFalse($exists);
         });
     }
+
+
+    public function testGlobs()
+    {
+        Async\wait(function () {
+            $dir = __DIR__.'/../src/*.php';
+            $files0 = glob($dir);
+            $files1 = yield Async\glob($dir);
+            $files2 = yield Async\rglob($dir);
+            $this->assertEquals($files0, $files1);
+            $this->assertEquals($files0, $files2);
+
+            $dir = __DIR__.'/../src/';
+            $files3 = scandir($dir);
+            $files4 = yield Async\scandir($dir);
+            $this->assertEquals($files3, $files4);
+        });
+    }
 }

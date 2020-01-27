@@ -741,4 +741,28 @@ final class Async
         }
         return static::asyncWithLoop($loop, $fn, $args);
     }
+
+
+    /**
+     * Recursive glob
+     */
+    public static function rglob(string $pattern, int $flags = 0)
+    {
+        return static::rglobWithLoop(static::getLoop(), $pattern, $flags);
+    }
+    public static function rglobWithLoop(LoopInterface $loop, string $pattern, int $flags = 0)
+    {
+        return static::resolve(function () use ($loop, $pattern, $flags) {
+            $files = yield static::asyncWithLoop($loop, 'glob', [$pattern, $flags]);
+            $pattern_name = basename($pattern);
+            $pattern_dir = dirname($pattern);
+            $pattern_dir_subs = $pattern_dir . DIRECTORY_SEPARATOR . '*';
+            $dirs = yield static::asyncWithLoop($loop, 'glob', [$pattern_dir_subs, GLOB_ONLYDIR | GLOB_NOSORT ]);
+            foreach ($dirs as $dir) {
+                $tmp = yield static::rglobWithLoop($loop, $dir . DIRECTORY_SEPARATOR . $pattern_name, $flags);
+                $files = array_merge($files, $tmp);
+            }
+            return $files;
+        });
+    }
 }

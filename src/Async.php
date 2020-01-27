@@ -750,14 +750,14 @@ final class Async
     {
         return static::rglobWithLoop(static::getLoop(), $pattern, $ignore, $flags);
     }
-    public static function rglobWithLoop(LoopInterface $loop, string $pattern, string $ignore = '',  int $flags = 0)
+    public static function rglobWithLoop(LoopInterface $loop, string $pattern, string $ignore = '', int $flags = 0)
     {
         return static::resolve(function () use ($loop, $pattern, $ignore, $flags) {
             $ignore_exp = false;
             $ignore_str = false;
             if ($ignore) {
                 $rc = @preg_match($ignore, '');
-                if ($rc === false ) {
+                if ($rc === false) {
                     $ignore_str = $ignore;
                 } else {
                     $ignore_exp = $ignore;
@@ -767,20 +767,18 @@ final class Async
                 if (preg_match($ignore_exp, $pattern)) {
                     return [];
                 }
-            }
-            else if ($ignore_str) {
+            } elseif ($ignore_str) {
                 if (strpos($pattern, $ignore_str) !== false) {
                     return [];
                 }
             }
             $files = yield static::asyncWithLoop($loop, 'glob', [$pattern, $flags]);
-            foreach ($files as $pos=>$file) {
+            foreach ($files as $pos => $file) {
                 if ($ignore_exp) {
                     if (preg_match($ignore_exp, $file)) {
                         unset($files[$pos]);
                     }
-                }
-                else if ($ignore_str) {
+                } elseif ($ignore_str) {
                     if (strpos($file, $ignore_str) !== false) {
                         unset($files[$pos]);
                     }
@@ -798,8 +796,7 @@ final class Async
                     if (preg_match($ignore_exp, $dir)) {
                         continue;
                     }
-                }
-                else if ($ignore_str) {
+                } elseif ($ignore_str) {
                     if (strpos($dir, $ignore_str) !== false) {
                         continue;
                     }

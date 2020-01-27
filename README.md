@@ -25,7 +25,7 @@ composer require choval/async
 ```php
 use Choval\Async;
 // Set the Loop to avoid having to pass it with every call.
-$loop = Factory::create();
+$loop = React\EventLoop\Factory::create();
 Async\set_loop($loop);
 ```
 
@@ -345,25 +345,78 @@ Async\timeout($func, 1.5)
     });
 ```
 
-### file\_put\_contents and file\_get\_contents
+### rglob
 
-These use [ReactPHP Filesystem](https://github.com/reactphp/filesystem) in the background, they are just shortcuts.
+A recursive `glob` with an ignore parameter.
+
+Consider the following files:
+
+```
+/files/
+/files/a.php
+/files/b.php
+/files/c.php
+/files/1/a.php
+/files/1/b.php
+/files/1/c.php
+/files/2/a.php
+/files/2/b.php
+/files/2/c.php
+```
 
 ```php
-$file = 'file.test';
-Async\file_put_contents($file, 'my file contents')
-    ->then(function() use ($file) {
-        // Bool true to append
-        return Async\file_put_contents($file, ' with some extra', true);
-    })
-    ->then(function() use ($file) {
-        // Offset and length can also be passed as argument
-        return Async\file_get_contents($file);
-    })
-    ->then(function($res) {
-        echo $res;
-        // Prints 'my file contents with some extra';
-    });
+$loop = React\EventLoop\Factory::create();
+Async\rglob('/files/*.php', 'a')
+	->then(function($files) {
+		/*
+		$files has:
+			/files/b.php
+			/files/c.php
+			/files/1/b.php
+			/files/1/c.php
+			/files/2/b.php
+			/files/2/c.php
+		 */
+	});
+```
+
+### PHP file functions
+
+The following functions are available with the same parameters as their PHP versions,
+but run using `Async\async` and can have a `LoopInterface` as their first parameter.
+
+- file\_get\_contents
+- file\_put\_contents
+- file\_exists
+- is\_file
+- is\_dir
+- is\_link
+- sha1\_file
+- md5\_file
+- mime\_content\_type
+- realpath
+- fileatime
+- filectime
+- filemtime
+- file
+- copy
+- rename
+- unlink
+- touch
+- mkdir
+- rmdir
+- scandir
+- glob
+
+Example:
+
+```php
+use Choval\Async;
+$loop = React\EventLoop\Factory::create();
+Async\file($loop, '/etc/hosts')
+	->then(function($lines) {
+		var_dump($lines);
+	});
 ```
 
 ## License

@@ -746,20 +746,68 @@ final class Async
     /**
      * Recursive glob
      */
-    public static function rglob(string $pattern, int $flags = 0)
+    public static function rglob(string $pattern, string $ignore = '', int $flags = 0)
     {
-        return static::rglobWithLoop(static::getLoop(), $pattern, $flags);
+        return static::rglobWithLoop(static::getLoop(), $pattern, $ignore, $flags);
     }
-    public static function rglobWithLoop(LoopInterface $loop, string $pattern, int $flags = 0)
+    public static function rglobWithLoop(LoopInterface $loop, string $pattern, string $ignore = '',  int $flags = 0)
     {
-        return static::resolve(function () use ($loop, $pattern, $flags) {
+        return static::resolve(function () use ($loop, $pattern, $ignore, $flags) {
+            $ignore_exp = false;
+            $ignore_str = false;
+            if ($ignore) {
+                $rc = @preg_match($ignore, '');
+                if ($rc === false ) {
+                    $ignore_str = $ignore;
+                } else {
+                    $ignore_exp = $ignore;
+                }
+            }
+            if ($ignore_exp) {
+                if (preg_match($ignore_exp, $pattern)) {
+                    return [];
+                }
+            }
+            else if ($ignore_str) {
+                if (strpos($pattern, $ignore_str) !== false) {
+                    return [];
+                }
+            }
             $files = yield static::asyncWithLoop($loop, 'glob', [$pattern, $flags]);
+            foreach ($files as $pos=>$file) {
+                if ($ignore_exp) {
+                    if (preg_match($ignore_exp, $file)) {
+                        unset($files[$pos]);
+                    }
+                }
+                else if ($ignore_str) {
+                    if (strpos($file, $ignore_str) !== false) {
+                        unset($files[$pos]);
+                    }
+                }
+            }
             $pattern_name = basename($pattern);
             $pattern_dir = dirname($pattern);
             $pattern_dir_subs = $pattern_dir . DIRECTORY_SEPARATOR . '*';
             $dirs = yield static::asyncWithLoop($loop, 'glob', [$pattern_dir_subs, GLOB_ONLYDIR | GLOB_NOSORT ]);
+            if (empty($dirs)) {
+                return $files;
+            }
             foreach ($dirs as $dir) {
+                if ($ignore_exp) {
+                    if (preg_match($ignore_exp, $dir)) {
+                        continue;
+                    }
+                }
+                else if ($ignore_str) {
+                    if (strpos($dir, $ignore_str) !== false) {
+                        continue;
+                    }
+                }
                 $tmp = yield static::rglobWithLoop($loop, $dir . DIRECTORY_SEPARATOR . $pattern_name, $flags);
+                if (empty($tmp)) {
+                    continue;
+                }
                 $files = array_merge($files, $tmp);
             }
             return $files;

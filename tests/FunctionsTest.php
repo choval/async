@@ -37,6 +37,14 @@ class FunctionsTest extends TestCase
 
         $res = Async\wait($defer->promise());
         $this->assertEquals($rand, $res);
+
+        $times = 0;
+        Async\wait(function () use (&$times) {
+            $times++;
+            yield Async\sleep(1);
+            return $times;
+        });
+        $this->assertEquals(1, $times);
     }
 
 
@@ -570,6 +578,35 @@ class FunctionsTest extends TestCase
             $contents = yield Async\file_get_contents($tmp);
             $this->assertEquals($random, $contents);
             unlink($tmp);
+        });
+    }
+
+
+    public function testCallPhpFunctionsInAsync()
+    {
+        Async\wait(function () {
+            $random = bin2hex(random_bytes(16));
+            $tmp = tempnam(sys_get_temp_dir(), 'asynctest');
+
+            $time = time();
+            $written = yield Async\file_put_contents($tmp, $random);
+            $this->assertEquals(strlen($random), $written);
+
+            $this->assertTrue( yield Async\file_exists($tmp) );
+
+            $data = yield Async\file_get_contents($tmp);
+            $this->assertEquals($random, $data);
+
+            $data = yield Async\filemtime($tmp);
+            $this->assertEquals($time, $data);
+
+            $data = yield Async\sha1_file($tmp);
+            $this->assertEquals( sha1_file($tmp), $data);
+
+            yield Async\unlink($tmp);
+
+            $exists = yield Async\is_file($tmp);
+            $this->assertFalse($exists);
         });
     }
 }

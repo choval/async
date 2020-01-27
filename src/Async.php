@@ -11,7 +11,6 @@ use Generator;
 use React\ChildProcess\Process;
 use React\EventLoop\Factory;
 use React\EventLoop\LoopInterface;
-use React\Filesystem\Filesystem;
 use React\Promise;
 use React\Promise\Deferred;
 use React\Promise\FulfilledPromise;
@@ -161,8 +160,8 @@ final class Async
     {
         try {
             $res = Block\await(static::resolve($promise), $loop, $timeout);
-        } catch(\Throwable $e) {
-            if (is_a( $e, \UnexpectedValueException::class)) {
+        } catch (\Throwable $e) {
+            if (is_a($e, \UnexpectedValueException::class)) {
                 $e = $e->getPrevious();
             }
             throw $e;
@@ -650,9 +649,10 @@ final class Async
             $prom->cancel();
             $reject(new CancelException());
         });
-        $prom->then(function ($res) use ($defer) {
-            $defer->resolve($res);
-        })
+        $prom
+            ->then(function ($res) use ($defer) {
+                $defer->resolve($res);
+            })
             ->otherwise(function ($e) use ($defer) {
                 $defer->reject($e);
             });
@@ -729,69 +729,16 @@ final class Async
 
 
     /**
-     * File put contents
+     * Calls a function in async mode
      */
-    public static function filePutContents(string $file, $contents, $append = false)
+    public static function call($fn, $args)
     {
-        return static::filePutContentsWithLoop(static::getLoop(), $file, $contents, $append);
-    }
-    public static function filePutContentsWithLoop(LoopInterface $loop, string $file, $contents, $append = false)
-    {
-        // TODO: Append and clear zero
-        $fs = Filesystem::create($loop);
-        if ($append) {
-            $prom = $fs->file($file)->appendContents($contents);
+        $first = current($args);
+        if ($first instanceof LoopInterface) {
+            $loop = array_shift($args);
         } else {
-            $prom = $fs->file($file)->putContents($contents);
+            $loop = Async::getLoop();
         }
-        return $prom
-            ->then(function () use ($file) {
-                return $file;
-            });
-    }
-
-
-
-    /**
-     * File get contents
-     */
-    public static function fileGetContents(string $path, $offset = 0, $length = null)
-    {
-        return static::fileGetContentsWithLoop(static::getLoop(), $path, $offset, $length);
-    }
-    public static function fileGetContentsWithLoop(LoopInterface $loop, string $path, $offset = 0, $length = null)
-    {
-        // TODO: RANGEs
-        $fs = Filesystem::create($loop);
-        $file = $fs->file($path);
-        return $file->exists()
-            ->then(function ($exists) use ($file, $offset, $length) {
-                return $file->getContents($offset, $length);
-            })
-            ->otherwise(function () {
-                return null;
-            });
-    }
-
-
-
-    /**
-     * File exists
-     */
-    public static function fileExists(string $path)
-    {
-        return static::fileExistsWithLoop(static::getLoop(), $path);
-    }
-    public static function fileExistsWithLoop(LoopInterface $loop, string $path)
-    {
-        $fs = Filesystem::create($loop);
-        $file = $fs->file($path);
-        return $file->exists()
-            ->then(function () {
-                return true;
-            })
-            ->otherwise(function () {
-                return false;
-            });
+        return static::asyncWithLoop($loop, $fn, $args);
     }
 }

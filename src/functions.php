@@ -274,48 +274,118 @@ function timeout()
 
 /**
  * File get contents
- * For more advanced use of files see:
- * https://github.com/reactphp/filesystem
  */
 function file_get_contents()
 {
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
-        $loop = Async::getLoop();
-        array_unshift($args, $loop);
-    }
-    return call_user_func_array([Async::class, 'fileGetContentsWithLoop'], $args);
+    return Async::call('file_get_contents', func_get_args());
 }
 
 
 /**
  * File put contents
- * For more advanced use of files see:
- * https://github.com/reactphp/filesystem
  */
 function file_put_contents()
 {
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
-        $loop = Async::getLoop();
-        array_unshift($args, $loop);
-    }
-    return call_user_func_array([Async::class, 'filePutContentsWithLoop'], $args);
+    return Async::call('file_put_contents', func_get_args());
 }
 
 
 /**
- *
+ * File exists
  */
 function file_exists()
 {
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
-        $loop = Async::getLoop();
-        array_unshift($args, $loop);
-    }
-    return call_user_func_array([Async::class, 'fileExistsWithLoop'], $args);
+    return Async::call('file_exists', func_get_args());
+}
+
+
+function is_file()
+{
+    return Async::call('is_file', func_get_args());
+}
+
+
+function is_dir()
+{
+    return Async::call('is_dir', func_get_args());
+}
+
+
+function is_link()
+{
+    return Async::call('is_link', func_get_args());
+}
+
+
+function sha1_file()
+{
+    return Async::call('sha1_file', func_get_args());
+}
+
+
+function md5_file()
+{
+    return Async::call('md5_file', func_get_args());
+}
+
+function mime_content_type()
+{
+    return Async::call('mime_content_type', func_get_args());
+}
+
+
+function realpath()
+{
+    return Async::call('realpath', func_get_args());
+}
+
+
+function fileatime()
+{
+    return Async::call('fileatime', func_get_args());
+}
+
+function filectime()
+{
+    return Async::call('filectime', func_get_args());
+}
+
+function filemtime()
+{
+    return Async::call('filemtime', func_get_args());
+}
+
+function file()
+{
+    return Async::call('file', func_get_args());
+}
+
+function copy()
+{
+    return Async::call('copy', func_get_args());
+}
+
+function rename()
+{
+    return Async::call('rename', func_get_args());
+}
+
+function unlink()
+{
+    return Async::call('unlink', func_get_args());
+}
+
+function touch()
+{
+    return Async::call('touch', func_get_args());
+}
+
+function mkdir()
+{
+    return Async::call('mkdir', func_get_args());
+}
+
+function rmdir()
+{
+    return Async::call('rmdir', func_get_args());
 }

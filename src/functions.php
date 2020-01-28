@@ -360,6 +360,11 @@ function file()
     return Async::call('file', func_get_args());
 }
 
+function filesize()
+{
+    return ASync::call('filesize', func_get_args());
+}
+
 function copy()
 {
     return Async::call('copy', func_get_args());

@@ -399,6 +399,7 @@ but run using `Async\async` and can have a `LoopInterface` as their first parame
 - filectime
 - filemtime
 - file
+- filesize
 - copy
 - rename
 - unlink

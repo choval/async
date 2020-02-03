@@ -61,7 +61,6 @@ final class Async
     {
         if (empty(static::$forks_limit)) {
             static::$forks_limit = 20;
-            // TODO: Calculate the max number of forks
         }
         return static::$forks_limit;
     }
@@ -91,6 +90,7 @@ final class Async
     public static function removeFork($id)
     {
         $promise = static::$forks[$id] ?? false;
+
         if ($promise) {
             $promise->cancel();
             unset(static::$forks[$id]);
@@ -109,9 +109,10 @@ final class Async
         $limit = static::getForksLimit();
         return static::resolve(function () use ($limit, $loop) {
             $count = count(static::$forks);
-            while (count(static::$forks) >= $limit) {
-                yield static::sleepWithLoop($loop, 0.001);
+            if ($count < $limit) {
+                return true;
             }
+            yield Promise\any(static::$forks);
             return true;
         });
     }

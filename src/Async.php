@@ -304,9 +304,10 @@ final class Async
             $promise->cancel();
             $reject(new CancelException());
         });
-        $timer = $loop->addTimer($timeout, function () use ($defer, $timeout) {
+        $timer = $loop->addTimer($timeout, function () use ($defer, $timeout, $promise) {
             // Note: This could also return a timeout exception instead of an async\exception
             $defer->reject(new Exception('Timed out after ' . $timeout . ' secs'));
+            $promise->cancel();
         });
         $promise->done(
             function ($res) use ($defer, $loop, $timer) {

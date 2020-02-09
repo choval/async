@@ -812,4 +812,33 @@ final class Async
             return $files;
         });
     }
+
+
+    /**
+     * Checks if a promise has finished without needing to wait for it
+     */
+    public static function isDone(PromiseInterfce $promise)
+    {
+        return static::isDoneWithLoop(static::getLoop(), $promise);
+    }
+    public static function isDoneWithLoop(LoopInterface $loop, PromiseInterface $promise)
+    {
+        $defer = new Deferred();
+        /*
+         * function ($resolve, $reject) use ($promise) {
+            $resolve(false);
+         });
+         */
+        $loop->futureTick(function () use ($defer, $promise) {
+            $defer->resolve(false);
+        });
+        $promise->done(
+            function () use ($defer) {
+                $defer->resolve(true);
+            },
+            function () use ($defer) {
+                $defer->resolve(true);
+            });
+        return static::waitWithLoop($loop, $defer->promise());
+    }
 }

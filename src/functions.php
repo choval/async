@@ -419,3 +419,20 @@ function rglob()
     }
     return call_user_func_array([Async::class, 'rglobWithLoop'], $args);
 }
+
+
+/**
+ * Checks if a promise is done
+ * true: Resolved or Rejected
+ * false: pending
+ */
+function is_done()
+{
+    $args = func_get_args();
+    $first = current($args);
+    if (!($first instanceof LoopInterface)) {
+        $loop = Async::getLoop();
+        array_unshift($args, $loop);
+    }
+    return call_user_func_array([Async::class, 'isDoneWithLoop'], $args);
+}

@@ -345,6 +345,24 @@ Async\timeout($func, 1.5)
     });
 ```
 
+### is\_done
+
+Checks if a `Promise` has been _resolved_ or _rejected_. This returns a boolean.
+
+```php
+$defer = new Deferred();
+$loop->addTimer(1, function () use ($defer) {
+    $defer->resolve(true);
+});
+$promise = $defer->promise();
+$i=0;
+while(!Async\is_done($promise)) {
+    $i++;
+}
+echo "Promise finished\n";
+// $i is around 20k+ in my laptop on battery
+```
+
 ### rglob
 
 A recursive `glob` with an ignore parameter.

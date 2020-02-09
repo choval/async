@@ -25,6 +25,23 @@ class FunctionsTest extends TestCase
 
 
 
+    public function testIsDone()
+    {
+        $loop = Async\get_loop();
+        $defer = new Deferred();
+        $loop->addTimer(0.1, function () use ($defer) {
+            $defer->resolve(true);
+        });
+        $promise = $defer->promise();
+        $i = 0;
+        while( ! Async\is_done($promise) ) {
+            $i++;
+        }
+        echo "Looped $i until the promise solved in 0.1 sec\n";
+        $this->assertGreaterThan(100, $i);
+    }
+
+
     public function testSync()
     {
         $rand = rand();
@@ -625,22 +642,5 @@ class FunctionsTest extends TestCase
             $files4 = yield Async\scandir($dir);
             $this->assertEquals($files3, $files4);
         });
-    }
-
-
-    public function testIsDone()
-    {
-        $loop = Async\get_loop();
-        $defer = new Deferred();
-        $loop->addTimer(0.1, function () use ($defer) {
-            $defer->resolve(true);
-        });
-        $promise = $defer->promise();
-        $i = 0;
-        while( ! Async\is_done($promise) ) {
-            $i++;
-        }
-        echo "Looped $i until the promise solved in 0.1 sec\n";
-        $this->assertGreaterThan(100, $i);
     }
 }

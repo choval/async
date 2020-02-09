@@ -17,6 +17,7 @@ use React\Promise\FulfilledPromise;
 use React\Promise\PromiseInterface;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
+use React\Promise\Timer;
 use React\Promise\Timer\TimeoutException;
 use React\Stream\ReadableStreamInterface;
 
@@ -25,7 +26,8 @@ final class Async
     private static $loop;
     private static $forks = [];
     private static $forks_limit;
-
+    private static $promises = [];
+    private static $dones = [];
 
 
     /**
@@ -159,13 +161,23 @@ final class Async
     }
     public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null)
     {
-        try {
-            $res = Block\await(static::resolve($promise), $loop, $timeout);
-        } catch (\Throwable $e) {
-            if (is_a($e, \UnexpectedValueException::class)) {
-                $e = $e->getPrevious();
+        $res = null;
+        $err = null;
+        $promise = static::resolve($promise);
+        if (!is_null($timeout)) {
+            $promise = Timer\timeout($promise, $timeout, $loop);
+        }
+        $final = $promise->then(
+            function($r) use (&$res) {
+                $res = $r;
+            },
+            function($e) use (&$err) {
+                $err = $e;
             }
-            throw $e;
+        );
+        while ( !static::isDoneWithLoop($loop, $final));
+        if ($err) {
+            throw $err;
         }
         return $res;
     }
@@ -823,22 +835,28 @@ final class Async
     }
     public static function isDoneWithLoop(LoopInterface $loop, PromiseInterface $promise)
     {
-        $defer = new Deferred();
-        /*
-         * function ($resolve, $reject) use ($promise) {
-            $resolve(false);
-         });
-         */
-        $loop->futureTick(function () use ($defer, $promise) {
-            $defer->resolve(false);
+        if (!($key = array_search($promise, static::$promises))) {
+            $key = bin2hex(random_bytes(12));
+            $func = function () use ($key, $loop) {
+                $loop->stop();
+                static::$dones[$key] = true;
+                unset(static::$promises[$key]);
+            };
+            static::$promises[$key] = $promise;
+            $promise->done($func, $func);
+        }
+        $loop->futureTick(function () use ($loop) {
+            $loop->stop();
         });
-        $promise->done(
-            function () use ($defer) {
-                $defer->resolve(true);
-            },
-            function () use ($defer) {
-                $defer->resolve(true);
-            });
-        return static::waitWithLoop($loop, $defer->promise());
+        try {
+            $loop->run();
+        } catch(\RuntimeException $e) {
+            if ($e->getMessage() != 'Can\'t shift from an empty datastructure') {
+                throw $e;
+            }
+        }
+        $res = static::$dones[$key] ?? false;
+        unset(static::$dones[$key]);
+        return $res;
     }
 }

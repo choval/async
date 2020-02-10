@@ -37,8 +37,7 @@ $loop = Factory::create();
 Async\set_loop($loop);
 ```
 
-If the loop is not set, all calls except `resolve` and `chain_resolve`  
-need a [`LoopInterface`](https://github.com/reactphp/event-loop) as the first parameter.
+If the loop is not set, all calls except `resolve` need a [`LoopInterface`](https://github.com/reactphp/event-loop) as the first parameter.
 
 
 ### Using yield

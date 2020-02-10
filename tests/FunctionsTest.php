@@ -24,7 +24,6 @@ class FunctionsTest extends TestCase
 
 
 
-
     public function testIsDone()
     {
         $loop = Async\get_loop();
@@ -87,7 +86,7 @@ class FunctionsTest extends TestCase
      */
     public function testSyncTimeout()
     {
-        $this->expectException(\React\Promise\Timer\TimeoutException::class);
+        $this->expectException(AsyncException::class);
         $res = Async\wait(Async\sleep(1), 0.5);
     }
 
@@ -325,45 +324,6 @@ class FunctionsTest extends TestCase
 
 
 
-    /**
-     * Executes one after the other.
-     * @depends testSync
-     * @depends testExecute
-     * @depends testResolveGenerator
-     */
-    public function testChainResolve()
-    {
-        $calls = [
-            function () {
-                return Async\execute('sleep 0.1 && echo 1');
-            },
-            function () {
-                return Async\execute('sleep 0.1 && echo 2');
-            },
-            function () {
-                return Async\execute('sleep 0.1 && echo 3');
-            },
-            function () {
-                return Async\execute('sleep 0.1 && echo 4');
-            },
-        ];
-        $res = Async\chain_resolve($calls);
-        $responses = Async\wait($res, 1);
-        $this->assertEquals('1', trim($responses[0]));
-        $this->assertEquals('2', trim($responses[1]));
-        $this->assertEquals('3', trim($responses[2]));
-        $this->assertEquals('4', trim($responses[3]));
-
-        $res = call_user_func_array('Choval\\Async\\chain_resolve', $calls);
-        $responses = Async\wait($res, 1);
-        $this->assertEquals('1', trim($responses[0]));
-        $this->assertEquals('2', trim($responses[1]));
-        $this->assertEquals('3', trim($responses[2]));
-        $this->assertEquals('4', trim($responses[3]));
-    }
-
-
-
     public function testAsyncBlockingCode()
     {
         $times = 10;
@@ -477,8 +437,8 @@ class FunctionsTest extends TestCase
             }
             return $id;
         };
-        $retries = 6;
-        $res = Async\wait(Async\retry($func, $retries, 0.1), 2);
+        $retries = $times+1;
+        $res = Async\wait(Async\retry($func, $retries, 0.1, 'bad error'), 2);
         $this->assertEquals($id, $res);
         $this->assertEquals(0, $times);
 

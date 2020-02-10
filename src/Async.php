@@ -5,20 +5,14 @@ namespace Choval\Async;
 use Choval\Async\CancelException;
 use Choval\Async\Exception;
 use Closure;
-use Clue\React\Block;
-use Evenement\EventEmitterInterface;
 use Generator;
 use React\ChildProcess\Process;
-use React\EventLoop\Factory;
 use React\EventLoop\LoopInterface;
 use React\Promise;
 use React\Promise\Deferred;
 use React\Promise\FulfilledPromise;
 use React\Promise\PromiseInterface;
 use React\Promise\RejectedPromise;
-use React\Promise\Stream;
-use React\Promise\Timer;
-use React\Promise\Timer\TimeoutException;
 use React\Stream\ReadableStreamInterface;
 
 final class Async
@@ -28,6 +22,7 @@ final class Async
     private static $forks_limit;
     private static $promises = [];
     private static $dones = [];
+
 
 
     /**
@@ -89,7 +84,7 @@ final class Async
      * Remove a fork
      *
      */
-    public static function removeFork($id)
+    private static function removeFork($id)
     {
         $promise = static::$forks[$id] ?? false;
 
@@ -165,17 +160,17 @@ final class Async
         $err = null;
         $promise = static::resolve($promise);
         if (!is_null($timeout)) {
-            $promise = Timer\timeout($promise, $timeout, $loop);
+            $promise = static::timeout($promise, $timeout, $loop);
         }
         $final = $promise->then(
-            function($r) use (&$res) {
+            function ($r) use (&$res) {
                 $res = $r;
             },
-            function($e) use (&$err) {
+            function ($e) use (&$err) {
                 $err = $e;
             }
         );
-        while ( !static::isDoneWithLoop($loop, $final));
+        while (!static::isDoneWithLoop($loop, $final));
         if ($err) {
             throw $err;
         }
@@ -339,73 +334,70 @@ final class Async
     /**
      * Retry
      */
-    public static function retry($func, int $retries = 10, float $frequency = 0.1, $type = null)
+    public static function retry($func, int $retries = 10, float $frequency = 0.001, $ignore_errors = null)
     {
         return static::retryWithLoop(static::getLoop(), $func, $retries, $frequency, $type);
     }
-    public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.1, $type = null)
+    public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.001, $ignore_errors = null)
     {
-        if (is_null($type)) {
-            $type = \Throwable::class;
+        if (is_null($ignore_errors)) {
+            $ignore_errors = \Exception::class;
         }
-        if (!is_array($type)) {
-            $type = [$type];
+        if (!is_array($ignore_errors)) {
+            $ignore_errors = [$ignore_errors];
         }
-        $cancelled = false;
-        $timer;
-        $i = $retries;
-        $defer = new Deferred(function ($resolve, $reject) use (&$cancelled, &$timer, $loop, &$i) {
-            $i = 0;
+        $timer = null;
+        $promise = null;
+        $defer = new Deferred(function ($resolve, $reject) use (&$timer, &$promise, $loop) {
+            if ($timer) {
+                $loop->cancelTimer($timer);
+            }
+            if ($promise) {
+                $promise->cancel();
+            }
             $reject(new CancelException());
         });
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
-        $last_e = new Exception('Failed retries', 0, $trace);
-        $running = false;
-        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($defer, &$i, $loop, &$last_e, &$running, $func, $type, &$cancelled, &$trace) {
-            if ($i < 0) {
-                $loop->cancelTimer($timer);
-                return $defer->reject($last_e);
-            } else {
-                $i--;
+        $error = null;
+        $goodfunc = function ($res) use (&$timer, $defer, $loop) {
+            $loop->cancelTimer($timer);
+            $defer->resolve($res);
+        };
+        $badfunc = function ($err) use (&$error, &$promise, $ignore_errors, $loop, &$timer, $defer) {
+            $error = $err;
+            $promise = null;
+            $raise = true;
+            $error_message = $error->getMessage();
+            foreach ($ignore_errors as $ignore) {
+                if ($error_message == $ignore || is_a($error, $ignore)) {
+                    $raise = false;
+                    break;
+                }
             }
-            if (!$running) {
-                $running = true;
-                static::retryResolve($func, $defer, $timer, $loop, $running, $trace, $last_e, $type);
+            if ($raise) {
+                $loop->cancelTimer($timer);
+                return $defer->reject($error);
+            }
+        };
+        $retries--;
+        $promise = static::resolve($func);
+        $promise->done($goodfunc, $badfunc);
+        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($func, $loop, &$retries, &$error, $goodfunc, $badfunc, $defer, &$trace, &$promise) {
+            if (is_null($promise)) {
+                $retries--;
+                if ($retries < 0) {
+                    $loop->cancelTimer($timer);
+                    if (empty($error)) {
+                        $error = new Exception('Retry exhausted attempts', 0, $trace);
+                    }
+                    return $defer->reject($error);
+                }
+                $promise = static::resolve($func);
+                $promise->done($goodfunc, $badfunc);
+                return;
             }
         });
-        static::retryResolve($func, $defer, $timer, $loop, $running, $trace, $last_e, $type);
         return $defer->promise();
-    }
-    // This is nasty, but im burnout and the pending list keeps growing
-    private static function retryResolve($func, $defer, $timer, $loop, &$running, &$trace, &$last_e, $type)
-    {
-        $running = true;
-        static::resolve($func)
-            ->done(
-                function ($res) use ($defer, $timer, $loop, &$running, &$trace) {
-                    $loop->cancelTimer($timer);
-                    $defer->resolve($res);
-                    $running = false;
-                    unset($trace);
-                },
-                function ($e) use ($defer, $loop, $timer, $type, &$last_e, &$running, &$trace) {
-                    $last_e = $e;
-                    $msg = $e->getMessage();
-                    $ignore = false;
-                    foreach ($type as $tmp) {
-                        if ($tmp == $msg || is_a($e, $tmp)) {
-                            $ignore = true;
-                            break;
-                        }
-                    }
-                    if (!$ignore) {
-                        $loop->cancelTimer($timer);
-                        $defer->reject($e);
-                    }
-                    $running = false;
-                    unset($trace);
-                }
-            );
     }
 
 
@@ -509,7 +501,7 @@ final class Async
     /**
      * Unwraps a generator and solves yielded promises
      */
-    public static function unwrapGenerator(Generator $generator)
+    private static function unwrapGenerator(Generator $generator)
     {
         $promise = static::resolve($generator->current());
         $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
@@ -676,31 +668,6 @@ final class Async
 
 
     /**
-     * Chain Resolve
-     */
-    public static function chainResolve()
-    {
-        $functions = func_get_args();
-        if (count($functions) == 1 && is_array(current($functions))) {
-            $functions = current($functions);
-        }
-        $prom = static::resolve(function () use ($functions) {
-            $rows = [];
-            foreach ($functions as $pos => $function) {
-                $rows[$pos] = yield static::resolve($function);
-            }
-            return $rows;
-        });
-        $defer = new Deferred(function ($resolve, $reject) use ($prom) {
-            $prom->cancel();
-            $reject(new CancelException());
-        });
-        return $prom;
-    }
-
-
-
-    /**
      * From: https://gist.github.com/nh-mike/fde9f69a57bc45c5b491d90fb2ee08df
      */
     public static function flattenExceptionBacktrace(\Throwable $exception)
@@ -850,7 +817,7 @@ final class Async
         });
         try {
             $loop->run();
-        } catch(\RuntimeException $e) {
+        } catch (\RuntimeException $e) {
             if ($e->getMessage() != 'Can\'t shift from an empty datastructure') {
                 throw $e;
             }

@@ -10,13 +10,26 @@ namespace Choval\Async;
  */
 
 use Choval\Async\Async;
-use Clue\React\Block;
-use React\ChildProcess\Process;
+use React\EventLoop\Factory;
 use React\EventLoop\LoopInterface;
 use React\Promise;
 use React\Promise\Deferred;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
+
+/**
+ * Creates and sets the event-loop
+ *
+ * @return LoopInterface
+ */
+function init()
+{
+    $loop = Factory::create();
+    Async::setLoop($loop);
+    return $loop;
+}
+
+
 
 /**
  * Sets the loop
@@ -31,7 +44,7 @@ function set_loop(LoopInterface $loop)
 
 
 /**
- * Gets the loop
+ * Gets the event-loop
  *
  * @return LoopInterface
  */
@@ -238,20 +251,6 @@ function resolve_generator($gen)
 function buffer(ReadableStreamInterface $stream, $maxLength = null)
 {
     return Async::buffer($stream, $maxLength);
-}
-
-
-/**
- *
- * Run promises one after the other
- * Chained... Returns a promise too
- *
- * Receives an array of functions that will be called one after the other
- *
- */
-function chain_resolve()
-{
-    return call_user_func_array([Async::class, 'chainResolve'], func_get_args());
 }
 
 

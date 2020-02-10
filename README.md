@@ -1,18 +1,22 @@
 # Choval\Async
 
-A collection of functions for programming in [ReactPHP](https://reactphp.org).
+
+A library to ease handling promises in [ReactPHP](https://reactphp.org).
 
 * [Install](#install)
 * [Usage](#usage)
-* Functions
-  * [execute](#execute)
-  * [resolve](#resolve)
-  * [async](#async)
-  * [sleep](#sleep)
-  * [wait](#wait)
-  * [chain_resolve](#chain_resolve)
-  * [retry](#retry)
 * [License](#license)
+* Functions
+  * [is\_done](#is_done) Instantly return if the Promise is resolved or rejected
+  * [resolve](#resolve) Use yield with promises!
+  * [execute](#execute) Execute a command
+  * [sleep](#sleep) Non-blocking sleep
+  * [wait](#wait \(alias sync\)) Make async code synchronous
+  * [async](#async) Run blocking code in async mode
+  * [retry](#retry) Retry a function multiple times
+  * [timeout](#timeout) Adds a timeout to a Promise
+  * [PHP file functions](PHP file functions) PHP's blocking file functions in async mode
+
 
 ## Install
 
@@ -20,62 +24,58 @@ A collection of functions for programming in [ReactPHP](https://reactphp.org).
 composer require choval/async
 ```
 
+
 ## Usage
 
 ```php
 use Choval\Async;
+use React\EventLoop\Factory;
+
+$loop = Factory::create();
+
 // Set the Loop to avoid having to pass it with every call.
-$loop = React\EventLoop\Factory::create();
 Async\set_loop($loop);
 ```
 
 If the loop is not set, all calls except `resolve` and `chain_resolve`  
 need a [`LoopInterface`](https://github.com/reactphp/event-loop) as the first parameter.
 
+
 ### Using yield
 
-Regular promise handling:
+The ugly way:
 
 ```php
-use React\Promise\FulfilledPromise;
-
 function future($i=0)
 {
-	return new FulfilledPromise($i+1);
+	return new React\Promise\FulfilledPromise($i+1);
 }
 
 future()
-	->then(function($i) {
+	->then(function ($i) {
 		return future($i);
 	})
-	->then(function($i) {
+	->then(function ($i) {
 		return future($i);
 	})
-	->then(function($i) {
+	->then(function ($i) {
 		return future($i);
 	})
-	->then(function($i) {
+	->then(function ($i) {
 		return future($i);
 	})
-	->then(function($i) {
+	->then(function ($i) {
 		echo $i;
 	});
 
 // Prints 5, but that chain nightmare...
 ```
 
-With `Choval\Async`
+Using `yield`, remember `future()` is returning a `Promise`.  
+And we're not blocking other events in the loop ;-)
 
 ```php
-use Choval\Async;
-use React\Promise\FulfilledPromise;
-
-function future($i=0)
-{
-	return new FulfilledPromise($i+1);
-}
-
-Async\resolve(function() {
+Async\resolve(function () {
 	$i = yield future();
 	$i = yield future($i);
 	$i = yield future($i);
@@ -87,22 +87,14 @@ Async\resolve(function() {
 // Prints 5 as well ;-)
 ```
 
-Or just loop it ...
+Or in a while-loop
 
 ```php
-use Choval\Async;
-use React\Promise\FulfilledPromise;
-
-function future($i=0)
-{
-	return new FulfilledPromise($i+1);
-}
-
-Async\resolve(function() {
-	$i=0;
-	for($e=0;$e<5;$e++) {
-		$i = yield future($i);
-	}
+Async\resolve(function () {
+	$i = 0;
+    while($i<5) {
+        $i = yield future($i);
+    }
 	echo $i;
 });
 ```
@@ -110,207 +102,187 @@ Async\resolve(function() {
 
 ## Functions
 
+### is\_done
+
+Checks if a `Promise` has been _resolved_ or _rejected_. This returns a boolean, not a `Promise`.  
+
+```php
+$defer = new React\Promise\Deferred();
+$loop->addTimer(1, function () use ($defer) {
+    $defer->resolve(true);
+});
+$promise = $defer->promise();
+$i = 0;
+while(!Async\is_done($promise)) {
+    $i++;
+}
+echo "Promise finished with $i loops\n";
+```
+
+
+### resolve
+
+This is what will let you `yield` promises, it's like Node.js [`await`](https://github.com/caolan/async).
+
+```php
+$promise = Async\resolve(function () {
+  yield 1;
+  yield 2;
+  return 'Wazza';
+});
+// $promise resolves with Wazza
+```
+
+Take for example the following async events.
+
+```php
+$defer1 = new React\Promise\Deferred();
+$loop->addTimer(1, function () use ($defer1) {
+	$defer1->resolve('hello');
+});
+$defer2 = new React\Promise\Deferred();
+$loop->addTimer(0.5, function () use ($defer2) {
+	$defer2->resolve('world');
+});
+
+$promise = Async\resolve(function () use ($defer1, $defer2) {
+  $out = [];
+  $out[] = yield $defer1->promise();
+  $out[] = yield $defer2->promise();
+  return implode(' ', $out);
+});
+```
+
+`$promise` resolves with `hello world` in 1 sec, despite the second promise resolving first.
+
+What if you need to run multiple async simultaneously?
+
+```php
+$promise = Async\resolve(function () {
+	$fetch = [
+		'bing' => 
+			Async\execute('curl https://bing.com/'),
+		'duckduckgo' => 
+			Async\execute('curl https://duckduckgo.com/'),
+		'google' => 
+			Async\execute('curl https://google.com/'),
+	];
+	$sources = yield React\Promise\all($fetch);
+	return $sources;
+});
+```
+
 ### execute
 
-Executes a command, like exec, but async.  
-Returns a promise with the output of the command.
+Executes a command asynchronously.  
+Returns a `Promise` with the output of the command.
 
 ```php
 Async\execute('echo "Wazza"')
-  ->then(function($output) {
-    // $output contains Wazza
+  ->then(function ($output) {
+    // $output contains Wazza\n
   })
-  ->otherwise(function($e) {
+  ->otherwise(function ($e) {
     // Throws an Exception if the execution fails
     // ie: 127 if the command does not exist
     $exitCode = $e->getCode();
   });
 ```
 
+A `timeout` parameter (in seconds) can be passed.
 
-### resolve
+### sleep
 
-Resolves a `Generator` or `Closure`. Allows using `yield` all over as `await`.
+An asynchronous `sleep` function. This won't block other events.
 
 ```php
-$ab = function() {
-  yield 1;
-  yield 2;
-  return 'Wazza';
-};
-
-$out = Async\resolve($ab);
-// $out is a promise that resolves with Wazza
+$promise = Async\resolve(function () {
+  $start = time();
+  yield Async\sleep(2);
+  $end = time();
+  return $end-$start;
+});
+// $promise resolves in ~2 seconds
 ```
 
-Allows you to ease promise handling like this:
+Remember this is a non-blocking `sleep`, if you do not wait for it or yield inside an Async\resolve, the `Promise` will solve in the background.
 
 ```php
-$ab = function() {
-  $out = [];
-  $out[] = yield Async\execute('echo -n hello');
-  $out[] = yield Async\execute('echo -n world');
-  return implode(' ', $out);
-};
+$start = time();
+Async\sleep(2);
+$end = time();
+// $start and $end will be the same
+```
 
-$out = Async\resolve($ab);
-// $out is a promise that resolves with 'hello world'
+### wait (alias sync)
+
+Makes asynchronous code blocking. Use this when you need to use an async library in a sync/blocking scenario.
+
+This function receives one of the following: `Generator`, `Closure` or `PromiseInterface`.
+
+```php
+$start = time();
+Async\wait(Async\sleep(2));
+$end = time();
+// $end == $start+2;
 ```
 
 ### async
 
-This can also be used to make blocking code run asynchronously.  
-Creates a fork in the background.
+Have a piece of blocking code that you need to run in async?
+Use this, just keep in mind it is using `pcntl_fork`.
 
-Arguments can be passed in an array (`call_user_func_array`).
-
+First parameter is a callable, second parameter is an array of parameters for the callable.
 
 ```php
-$blocking_code = function($secs) {
-  \sleep($secs);
+$blocking_code = function ($secs) {
+  sleep($secs);
   return time();
 }
+
 $secs = 1;
 $promises = [];
-$promises[] = Async\async( $blocking_code , [$secs]);
-$promises[] = Async\async( $blocking_code , [$secs]);
-$promises[] = Async\async( $blocking_code , [$secs]);
-$promises[] = Async\async( $blocking_code , [$secs]);
-$init = time();
-Promise\all($promises)
-  ->then( function($times) use ($init) {
-    // $times will all be the same, as they ran simultaneously
-    // instead of a one sec difference between each other.
-    // Also, the promises take 1 sec to resolve instead of 4.
+$promises[] = Async\async($blocking_code, [$secs]);
+$promises[] = Async\async($blocking_code, [$secs]);
+$promises[] = Async\async($blocking_code, [$secs]);
+$promises[] = Async\async($blocking_code, [$secs]);
+$base = time()+$secs;
 
-    // All times will be equal, and larger than init by 1 sec.
-  });
+$times = Async\wait(React\Promise\all($promises));
+foreach ($times as $time) {
+	// $time === $base
+}
 ```
 
 There's a limit of 20 simultaneously running async forks.
-This limit can be changed by calling `Async\setForksLimit`.
+This limit can be changed by calling `Async\set_forks_limit`.
 
 ```php
 Async\set_forks_limit(100);
 echo Async\get_forks_limit(); // 100
 ```
 
-When the limit is reached, the code will wait for a previous
-fork to finish before running, keeping a max of async forks
-at the set forks limit (100msec between checks).
-
-
-### sleep
-
-An async sleep function. This will keep your code async.
-
-```php
-$ab = function() {
-  $start = time();
-  yield Async\sleep(2);
-  $end = time();
-  return $end-$start;
-};
-
-$out = Async\resolve($ab);
-// $out is a promise that resolves with 2
-// +- microsecs
-```
-
-**DO NOT USE LIKE THIS**
-
-As `Choval\Async\sleep` is non-blocking.
-
-```php
-$start = time();
-Async\sleep(2);
-$end = time();
-
-// $start and $end will have the same time
-// +- microsecs
-```
-
-### wait
-
-(aka sync)
-
-Makes async code blocking, this is based on Clue's block await.  
-Handles `Generator`, `Closure`, `Promise`, `Buffer` and `array` of `Promise`.  
-
-Use this for regular blocking scripts where async libraries are needed.
-
-`wait` and `sync` are aliases.
-
-**WARNING: This will make your code BLOCKING (aka NON-ASYNC)!**
-
-```php
-$res = Async\sync($generator);
-$res = Async\sync($promise);
-$res = Async\sync($promises);
-
-$res = Async\wait($generator);
-$res = Async\wait($promise);
-$res = Async\wait($promises);
-```
-
-
-### chain\_resolve
-
-This makes `Promise` or `Generator` run one after the other.  
-
-```php
-$calls = [];
-$calls[] = function() { Async\execute('echo -n 1'); };
-$calls[] = function() { Async\execute('echo -n 2'); };
-$calls[] = function() { Async\execute('echo -n 3'); };
-$calls[] = function() { Async\execute('echo -n 4'); };
-
-Async\chain_resolve($calls)
-  ->then($ordered) {
-    // $ordered is
-    // [ 1 , 2 , 3 , 4 ]
-  });
-```
-
-Or alternatively, using a `Generator` and `Async\resolve`.  
-`Async\chain_resolve` does this for you.
-
-```php
-$ab = function() {
-  $out = [];
-  $out[] = (int) yield execute('echo -n 1');
-  $out[] = (int) yield execute('echo -n 2');
-  $out[] = (int) yield execute('echo -n 3');
-  $out[] = (int) yield execute('echo -n 4');
-  return $out;
-};
-
-Async\resolve($ab)
-  ->then($ordered) {
-    // $ordered is 
-    // [ 1 , 2 , 3 , 4 ]
-  });
-```
+When the limit is reached, the code will wait for any previous
+fork to finish before continuing, keeping a max of async forks
+at the set forks limit.
 
 ### retry
 
-Retries a function multiples times before finally accepting the last `Exception`.  
-This can catch a specific `Exception` class or message.
+Runs a __function__ (Closure/Generator) up to `retries` times for a "good" return. Otherwise, returns the last Exception.  
+This function can also ignore a set of Exception classes or messages.
 
 ```php
 $times = 5;
-$func = function() use (&$times) {
+$func = function () use (&$times) {
   if(--$times) {
     throw new \Exception('bad error');
   }
-  return 'good';
+  return 'ok';
 };
-$retries = 8;
+$retries = 6;
 Async\retry($func, $retries, 0.1, 'bad error')
-  ->then(function($res) use (&$retries, &$times) {
-    // $res is 'good'
-    // $retries is 3
-    // $times is 0
+  ->then(function ($res) {
+    // $res is 'ok'
   });
 ```
 
@@ -319,8 +291,8 @@ Async\retry($func, $retries, 0.1, 'bad error')
  * @param LoopInterface $loop (optional)
  * @param callable $func
  * @param int $retries=10 (optional)
- * @param float $frequency=0.1 (optional)
- * @param string $type (optional) The Throwable class to catch or string to match
+ * @param float $frequency=0.001 (optional)
+ * @param string $ignore_errors (optional) The Throwable class to catch or string to match against Exception->getMessage()
  *
  * @return Promise
  */
@@ -328,39 +300,15 @@ Async\retry($func, $retries, 0.1, 'bad error')
 
 ### timeout
 
-Alias of `React\Promise\Timer\timeout()` with a resolve for the promise, allowing to pass a `Generator` or a `Closure`.
+Similar to `React\Promise\Timer\timeout()`, but allows a `Generator` or `Closure` too.
 
 ```php
-$func = function() {
+$func = function () {
     yield Async\sleep(2);
     return true;
 };
-Async\timeout($func, 1.5)
-    ->then(function($r) {
-        // Will not reach here
-    })
-    ->otherwise(function($e) {
-        // Will reach here
-        $timedout_seconds = $e->getTimeout();
-    });
-```
-
-### is\_done
-
-Checks if a `Promise` has been _resolved_ or _rejected_. This returns a boolean.
-
-```php
-$defer = new Deferred();
-$loop->addTimer(1, function () use ($defer) {
-    $defer->resolve(true);
-});
-$promise = $defer->promise();
-$i=0;
-while(!Async\is_done($promise)) {
-    $i++;
-}
-echo "Promise finished\n";
-// $i is around 20k+ in my laptop on battery
+Async\wait(Async\timeout($func, 1.5));
+// Throws an Exception due to the timeout 1.5 < 2
 ```
 
 ### rglob
@@ -371,9 +319,12 @@ Consider the following files:
 
 ```
 /files/
+/files/a.txt
+/files/b.txt
 /files/a.php
 /files/b.php
 /files/c.php
+/files/1/a.txt
 /files/1/a.php
 /files/1/b.php
 /files/1/c.php
@@ -383,62 +334,55 @@ Consider the following files:
 ```
 
 ```php
-$loop = React\EventLoop\Factory::create();
-Async\rglob('/files/*.php', 'a')
-	->then(function($files) {
-		/*
-		$files has:
-			/files/b.php
-			/files/c.php
-			/files/1/b.php
-			/files/1/c.php
-			/files/2/b.php
-			/files/2/c.php
-		 */
-	});
+$files = Async\wait(Async\rglob('/files/*.php', 'a'));
+/*
+$files has:
+/files/b.php
+/files/c.php
+/files/1/b.php
+/files/1/c.php
+/files/2/b.php
+/files/2/c.php
+*/
 ```
 
 ### PHP file functions
 
-The following functions are available with the same parameters as their PHP versions,
-but run using `Async\async` and can have a `LoopInterface` as their first parameter.
+The following functions are available with the same parameters as their PHP versions, but run using `Async\async` and accept a `LoopInterface` as their first parameter.
 
-- file\_get\_contents
-- file\_put\_contents
-- file\_exists
-- is\_file
-- is\_dir
-- is\_link
-- sha1\_file
-- md5\_file
-- mime\_content\_type
-- realpath
-- fileatime
-- filectime
-- filemtime
-- file
-- filesize
-- copy
-- rename
-- unlink
-- touch
-- mkdir
-- rmdir
-- scandir
-- glob
+```
+file_get_contents
+file_put_contents
+file_exists
+is_file
+is_dir
+is_link
+sha1_file
+md5_file
+mime_content_type
+realpath
+fileatime
+filectime
+filemtime
+file
+filesize
+copy
+rename
+unlink
+touch
+mkdir
+rmdir
+scandir
+glob
+```
 
 Example:
 
 ```php
-use Choval\Async;
-$loop = React\EventLoop\Factory::create();
-Async\file($loop, '/etc/hosts')
-	->then(function($lines) {
-		var_dump($lines);
-	});
+$lines = Async\wait(Async\file('/etc/hosts'));
+var_dump($lines);
 ```
 
 ## License
 
-MIT, see LICENSE
-
+MIT, see LICENSE.

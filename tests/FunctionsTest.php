@@ -587,6 +587,19 @@ class FunctionsTest extends TestCase
     }
 
 
+    public function testPhpAsyncFunctionsStress()
+    {
+        Async\wait(function () {
+            $file = __FILE__;
+            $times = 100;
+            while(--$times) {
+                $res = yield Async\is_file($file);
+                $this->assertTrue($res);
+            }
+        });
+    }
+
+
     public function testGlobs()
     {
         Async\wait(function () {

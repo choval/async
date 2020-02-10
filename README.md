@@ -349,6 +349,8 @@ $files has:
 
 The following functions are available with the same parameters as their PHP versions, but run using `Async\async` and accept a `LoopInterface` as their first parameter.
 
+These are not ready for production and/or not tested/optimized. Please use with caution.
+
 ```
 file_get_contents
 file_put_contents

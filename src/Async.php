@@ -360,7 +360,9 @@ final class Async
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
         $error = null;
         $goodfunc = function ($res) use (&$timer, $defer, $loop) {
-            $loop->cancelTimer($timer);
+            if ($timer) {
+                $loop->cancelTimer($timer);
+            }
             $defer->resolve($res);
         };
         $badfunc = function ($err) use (&$error, &$promise, $ignore_errors, $loop, &$timer, $defer) {
@@ -375,7 +377,9 @@ final class Async
                 }
             }
             if ($raise) {
-                $loop->cancelTimer($timer);
+                if ($timer) {
+                    $loop->cancelTimer($timer);
+                }
                 return $defer->reject($error);
             }
         };

@@ -359,7 +359,10 @@ final class Async
         });
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
         $error = null;
-        $goodfunc = function ($res) use (&$timer, $defer, $loop) {
+        $goodfunc = function ($res) use (&$timer, $defer, $loop, &$promise) {
+            if ($promise) {
+                $promise->cancel();
+            }
             if ($timer) {
                 $loop->cancelTimer($timer);
             }
@@ -367,6 +370,9 @@ final class Async
         };
         $badfunc = function ($err) use (&$error, &$promise, $ignore_errors, $loop, &$timer, $defer) {
             $error = $err;
+            if ($promise) {
+                $promise->cancel();
+            }
             $promise = null;
             $raise = true;
             $error_message = $error->getMessage();

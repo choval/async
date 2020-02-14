@@ -359,7 +359,29 @@ final class Async
             $ignore_errors = [$ignore_errors];
         }
         $error = null;
-        $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($func, &$retries, $ignore_errors, &$error, $defer, &$promise, &$trace) {
+        $goodcb = function($res) use ($defer) {
+            $defer->resolve($res);
+        };
+        $badcb = function($e) use (&$promise, &$error, $defer, $ignore_errors) {
+            $error = $e;
+            $error_message = $e->getMessage();
+            $raise = true;
+            foreach ($ignore_errors as $ignore) {
+                if ($error_message == $ignore || is_a($e, $ignore)) {
+                    $raise = false;
+                    break;
+                }
+            }
+            if ($raise) {
+                $defer->reject($error);
+            } else {
+                $promise = null;
+            }
+        };
+        $retries--;
+        $promise = static::resolve($func);
+        $promise->done($goodcb, $badcb);
+        $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($func, &$retries, $ignore_errors, &$error, $defer, &$promise, &$trace, $goodcb, $badcb) {
             if (is_null($promise)) {
                 if ($retries < 0) {
                     if (empty($error)) {
@@ -369,27 +391,7 @@ final class Async
                 }
                 $retries--;
                 $promise = static::resolve($func);
-                $promise->done(
-                    function($res) use ($defer) {
-                        $defer->resolve($res);
-                    },
-                    function($e) use (&$promise, &$error, $defer, $ignore_errors) {
-                        $error = $e;
-                        $error_message = $e->getMessage();
-                        $raise = true;
-                        foreach ($ignore_errors as $ignore) {
-                            if ($error_message == $ignore || is_a($e, $ignore)) {
-                                $raise = false;
-                                break;
-                            }
-                        }
-                        if ($raise) {
-                            $defer->reject($error);
-                        } else {
-                            $promise = null;
-                        }
-                    }
-                );
+                $promise->done($goodcb, $badcb);
             }
         });
         $defer_promise = $defer->promise();

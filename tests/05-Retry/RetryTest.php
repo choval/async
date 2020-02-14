@@ -6,6 +6,7 @@ use Choval\Async\Exception as AsyncException;
 use PHPUnit\Framework\TestCase;
 use React\EventLoop\Factory;
 use React\Promise;
+use React\Promise\FulfilledPromise;
 use React\Promise\Deferred;
 
 class RetryTest extends TestCase
@@ -45,6 +46,18 @@ class RetryTest extends TestCase
         $this->expectExceptionMessage('final error');
         $res = Async\wait(Async\retry($func, $retries, 0.1, 'bad error'));
     }
+
+
+
+    public function testRetryImmediateResponse()
+    {
+        $start = microtime(true);
+        $res = Async\wait(Async\retry(function() { return true; }, 1, 2));
+        $end = microtime(true);
+        $diff = $end-$start;
+        $this->assertLessThan(0.1, $diff);
+    }
+
 
 
     public function testRetryStress()

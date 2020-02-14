@@ -57,7 +57,7 @@ final class Async
     public static function getForksLimit()
     {
         if (empty(static::$forks_limit)) {
-            static::$forks_limit = 20;
+            static::$forks_limit = 50;
         }
         return static::$forks_limit;
     }
@@ -103,8 +103,8 @@ final class Async
      */
     public static function waitFreeFork(LoopInterface $loop)
     {
-        $limit = static::getForksLimit();
-        return static::resolve(function () use ($limit, $loop) {
+        return static::resolve(function () use ($loop) {
+            $limit = static::getForksLimit();
             $count = count(static::$forks);
             if ($count < $limit) {
                 return true;
@@ -188,7 +188,7 @@ final class Async
     }
     public static function sleepWithLoop(LoopInterface $loop, float $time)
     {
-        $timer;
+        $timer = null;
         $defer = new Deferred(function ($resolve, $reject) use (&$timer, $loop) {
             if ($timer) {
                 $loop->cancelTimer($timer);
@@ -216,7 +216,7 @@ final class Async
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
         }
-        $proc;
+        $proc = null;
         $defer = new Deferred(function () use (&$proc) {
             if ($proc) {
                 $proc->terminate();
@@ -340,74 +340,63 @@ final class Async
     }
     public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.001, $ignore_errors = null)
     {
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+        $promise = null;
+        $timer = null;
+        $defer = new Deferred(function ($resolve, $reject) use (&$promise, &$timer, $loop) {
+            if ($promise) {
+                $promise->cancel();
+            }
+            if ($timer) {
+                $loop->cancelTimer($timer);
+            }
+            $reject(new CancelException());
+        });
         if (is_null($ignore_errors)) {
             $ignore_errors = \Exception::class;
         }
         if (!is_array($ignore_errors)) {
             $ignore_errors = [$ignore_errors];
         }
-        $timer = null;
-        $promise = null;
-        $defer = new Deferred(function ($resolve, $reject) use (&$timer, &$promise, $loop) {
-            if ($timer) {
-                $loop->cancelTimer($timer);
-            }
-            if ($promise) {
-                $promise->cancel();
-            }
-            $reject(new CancelException());
-        });
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
         $error = null;
-        $goodfunc = function ($res) use (&$timer, $defer, $loop, &$promise) {
-            if ($promise) {
-                $promise->cancel();
-            }
-            if ($timer) {
-                $loop->cancelTimer($timer);
-            }
-            $defer->resolve($res);
-        };
-        $badfunc = function ($err) use (&$error, &$promise, $ignore_errors, $loop, &$timer, $defer) {
-            $error = $err;
-            if ($promise) {
-                $promise->cancel();
-            }
-            $promise = null;
-            $raise = true;
-            $error_message = $error->getMessage();
-            foreach ($ignore_errors as $ignore) {
-                if ($error_message == $ignore || is_a($error, $ignore)) {
-                    $raise = false;
-                    break;
-                }
-            }
-            if ($raise) {
-                if ($timer) {
-                    $loop->cancelTimer($timer);
-                }
-                return $defer->reject($error);
-            }
-        };
-        $retries--;
-        $promise = static::resolve($func);
-        $promise->done($goodfunc, $badfunc);
-        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($func, $loop, &$retries, &$error, $goodfunc, $badfunc, $defer, &$trace, &$promise) {
+        $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($func, &$retries, $ignore_errors, &$error, $defer, &$promise, &$trace) {
             if (is_null($promise)) {
-                $retries--;
                 if ($retries < 0) {
-                    $loop->cancelTimer($timer);
                     if (empty($error)) {
                         $error = new Exception('Retry exhausted attempts', 0, $trace);
                     }
                     return $defer->reject($error);
                 }
+                $retries--;
                 $promise = static::resolve($func);
-                $promise->done($goodfunc, $badfunc);
-                return;
+                $promise->done(
+                    function($res) use ($defer) {
+                        $defer->resolve($res);
+                    },
+                    function($e) use (&$promise, &$error, $defer, $ignore_errors) {
+                        $error = $e;
+                        $error_message = $e->getMessage();
+                        $raise = true;
+                        foreach ($ignore_errors as $ignore) {
+                            if ($error_message == $ignore || is_a($e, $ignore)) {
+                                $raise = false;
+                                break;
+                            }
+                        }
+                        if ($raise) {
+                            $defer->reject($error);
+                        } else {
+                            $promise = null;
+                        }
+                    }
+                );
             }
         });
-        return $defer->promise();
+        $defer_promise = $defer->promise();
+        $defer_promise->always(function() use ($timer, $loop) {
+            $loop->cancelTimer($timer);
+        });
+        return $defer_promise;
     }
 
 
@@ -661,7 +650,9 @@ final class Async
         } else {
             return new FulfilledPromise($gen);
         }
-        $defer = new Deferred(function ($resolve, $reject) use ($prom) {
+        $canceled = false;
+        $defer = new Deferred(function ($resolve, $reject) use ($prom, &$canceled) {
+            $canceled = true;
             $prom->cancel();
             $reject(new CancelException());
         });
@@ -806,15 +797,16 @@ final class Async
     /**
      * Checks if a promise has finished without needing to wait for it
      */
-    public static function isDone(PromiseInterfce $promise)
+    public static function isDone(PromiseInterface $promise, &$result=null)
     {
-        return static::isDoneWithLoop(static::getLoop(), $promise);
+        return static::isDoneWithLoop(static::getLoop(), $promise, $result);
     }
-    public static function isDoneWithLoop(LoopInterface $loop, PromiseInterface $promise)
+    public static function isDoneWithLoop(LoopInterface $loop, PromiseInterface $promise, &$result=null)
     {
         if (!($key = array_search($promise, static::$promises))) {
             $key = bin2hex(random_bytes(12));
-            $func = function () use ($key, $loop) {
+            $func = function ($res) use ($key, $loop, &$result) {
+                $result = $res;
                 $loop->stop();
                 static::$dones[$key] = true;
                 unset(static::$promises[$key]);

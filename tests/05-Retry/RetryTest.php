@@ -8,7 +8,6 @@ use React\EventLoop\Factory;
 use React\Promise;
 use React\Promise\Deferred;
 
-
 class RetryTest extends TestCase
 {
     public static $loop;
@@ -52,14 +51,17 @@ class RetryTest extends TestCase
     {
         $times = 1000;
         $id = uniqid();
-        $func = function () use (&$times, $id) {
+        $max_mem = memory_get_usage() * 2;
+        $func = function () use (&$times, $id, $max_mem) {
+            $mem = memory_get_usage();
+            $this->assertLessThan($max_mem, $mem);
             if (--$times) {
                 throw new \Exception('bad error');
             }
             return $id;
         };
         $retries = $times + 1;
-        $res = Async\wait(Async\retry($func, $retries, 0.001, 'bad error'), 1.1);
+        $res = Async\wait(Async\retry($func, $retries, 0, 'bad error'), 1);
         $this->assertEquals($id, $res);
         $this->assertEquals(0, $times);
     }

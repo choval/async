@@ -359,10 +359,10 @@ final class Async
             $ignore_errors = [$ignore_errors];
         }
         $error = null;
-        $goodcb = function($res) use ($defer) {
+        $goodcb = function ($res) use ($defer) {
             $defer->resolve($res);
         };
-        $badcb = function($e) use (&$promise, &$error, $defer, $ignore_errors) {
+        $badcb = function ($e) use (&$promise, &$error, $defer, $ignore_errors) {
             $error = $e;
             $error_message = $e->getMessage();
             $raise = true;
@@ -381,7 +381,7 @@ final class Async
         $retries--;
         $promise = static::resolve($func);
         $promise->done($goodcb, $badcb);
-        $timer = $loop->addPeriodicTimer($frequency, function($timer) use ($func, &$retries, $ignore_errors, &$error, $defer, &$promise, &$trace, $goodcb, $badcb) {
+        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($func, &$retries, $ignore_errors, &$error, $defer, &$promise, &$trace, $goodcb, $badcb) {
             if (is_null($promise)) {
                 if ($retries < 0) {
                     if (empty($error)) {
@@ -395,7 +395,7 @@ final class Async
             }
         });
         $defer_promise = $defer->promise();
-        $defer_promise->always(function() use ($timer, $loop) {
+        $defer_promise->always(function () use ($timer, $loop) {
             $loop->cancelTimer($timer);
         });
         return $defer_promise;
@@ -799,11 +799,11 @@ final class Async
     /**
      * Checks if a promise has finished without needing to wait for it
      */
-    public static function isDone(PromiseInterface $promise, &$result=null)
+    public static function isDone(PromiseInterface $promise, &$result = null)
     {
         return static::isDoneWithLoop(static::getLoop(), $promise, $result);
     }
-    public static function isDoneWithLoop(LoopInterface $loop, PromiseInterface $promise, &$result=null)
+    public static function isDoneWithLoop(LoopInterface $loop, PromiseInterface $promise, &$result = null)
     {
         if (!($key = array_search($promise, static::$promises))) {
             $key = bin2hex(random_bytes(12));

@@ -11,7 +11,7 @@ A library to ease handling promises in [ReactPHP](https://reactphp.org).
   * [resolve](#resolve) Use yield with promises!
   * [execute](#execute) Execute a command
   * [sleep](#sleep) Non-blocking sleep
-  * [wait](#wait \(alias sync\)) Make async code synchronous
+  * [wait](#wait) Make async code synchronous
   * [async](#async) Run blocking code in async mode
   * [retry](#retry) Retry a function multiple times
   * [timeout](#timeout) Adds a timeout to a Promise
@@ -213,9 +213,9 @@ $end = time();
 // $start and $end will be the same
 ```
 
-### wait (alias sync)
+### wait
 
-Makes asynchronous code blocking. Use this when you need to use an async library in a sync/blocking scenario.
+Also knowsn as `sync`, makes asynchronous code blocking. Use this when you need to use an async library in a sync/blocking scenario.
 
 This function receives one of the following: `Generator`, `Closure` or `PromiseInterface`.
 
@@ -253,8 +253,9 @@ foreach ($times as $time) {
 }
 ```
 
-There's a limit of 20 simultaneously running async forks.
-This limit can be changed by calling `Async\set_forks_limit`.
+There's a limit of 50 simultaneously running async forks.
+This limit can be changed by calling `Async\set_forks_limit`.  
+This limit is counted for `Async\execute` as well.
 
 ```php
 Async\set_forks_limit(100);

@@ -19,6 +19,7 @@ class FilesTest extends TestCase
     }
 
 
+
     public function testFileGetContents()
     {
         Async\wait(function () {
@@ -30,6 +31,26 @@ class FilesTest extends TestCase
             unlink($tmp);
         });
     }
+
+
+
+    public function testPhpAsyncFunctionsStress()
+    {
+        Async\wait(function () {
+            $start = microtime(true);
+            $file = __FILE__;
+            $orig = $times = 20;
+            while(--$times) {
+                $res = yield Async\is_file($file);
+                $this->assertTrue($res);
+            }
+            $end = microtime(true);
+            $diff = $end-$start;
+            // Check it takes no more than 50 milisecs
+            $this->assertLessThan($orig*0.05, $diff);
+        });
+    }
+
 
 
     public function testCallPhpFunctionsInAsync()
@@ -60,18 +81,6 @@ class FilesTest extends TestCase
         });
     }
 
-
-    public function testPhpAsyncFunctionsStress()
-    {
-        Async\wait(function () {
-            $file = __FILE__;
-            $times = 100;
-            while(--$times) {
-                $res = yield Async\is_file($file);
-                $this->assertTrue($res);
-            }
-        });
-    }
 
 
     public function testGlobs()

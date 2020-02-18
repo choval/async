@@ -15,7 +15,7 @@ A library to ease handling promises in [ReactPHP](https://reactphp.org).
   * [async](#async) Run blocking code in async mode
   * [retry](#retry) Retry a function multiple times
   * [timeout](#timeout) Adds a timeout to a Promise
-  * [PHP file functions](PHP file functions) PHP's blocking file functions in async mode
+  * [PHP file functions](#file_functions) PHP's blocking file functions in async mode
 
 
 ## Install
@@ -346,6 +346,7 @@ $files has:
 */
 ```
 
+<a name="file_functions"></a>
 ### PHP file functions
 
 The following functions are available with the same parameters as their PHP versions, but run using `Async\async` and accept a `LoopInterface` as their first parameter.

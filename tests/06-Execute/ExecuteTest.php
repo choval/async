@@ -32,6 +32,17 @@ class ExecuteTest extends TestCase
     }
 
 
+    public function testStress()
+    {
+        $limit = 1000;
+        for ($i=0;$i<$limit;$i++) {
+            $rand = rand();
+            $out = Async\wait(Async\execute('echo '. $rand), 1);
+            $this->assertEquals($rand, trim($out));
+        }
+    }
+
+
     public function testExecuteKill()
     {
         $this->expectException(\Exception::class);

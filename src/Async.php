@@ -197,6 +197,7 @@ final class Async
         });
         $timer = $loop->addTimer($time, function ($timer) use ($defer, $time) {
             $defer->resolve($time);
+            unset($defer, $time, $timer);
         });
         return $defer->promise();
     }
@@ -502,63 +503,97 @@ final class Async
     /**
      * Unwraps a generator and solves yielded promises
      */
-    private static function unwrapGenerator(Generator $generator)
+    private static function unwrapGenerator(Generator $generator, int $depth = 0)
     {
-        $promise = static::resolve($generator->current());
+        $promise = $generator->current();
+        try {
+            while (is_a($promise, Closure::class)) {
+                $promise = $promise();
+            }
+        } catch(\Throwable $e) {
+            return new RejectedPromise($e);
+        }
+        while (is_a($promise, Generator::class)) {
+            $promise = static::unwrapGenerator($promise, $depth + 1);
+        }
+        if (!is_a($promise, PromiseInterface::class)) {
+            if (!$generator->valid()) {
+                return $promise;
+            }
+            try {
+                $generator->send($promise);
+            }
+            catch (\Throwable $e) {
+                if ($generator->valid()) {
+                    $generator->throw($e);
+                } else {
+                    return new RejectedPromise($e);
+                }
+            }
+            if (!$generator->valid()) {
+                try {
+                    return $generator->getReturn();
+                } catch(\Throwable $e) {
+                    throw $e;
+                }
+                return;
+            }
+            return static::unwrapGenerator($generator, $depth + 1);
+        }
         $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
             $promise->cancel();
             // $reject(new CancelException());
             $generator->throw(new CancelException());
         });
         $promise
-                ->then(function ($res) use ($generator, $defer) {
-                    try {
-                        $generator->send($res);
-                    } catch (\Throwable $e) {
-                        if ($generator->valid()) {
-                            $generator->throw($e);
-                        } else {
-                            throw $e;
-                        }
-                    }
-                    if (!$generator->valid()) {
-                        try {
-                            $return = $generator->getReturn();
-                            return $return;
-                        } catch (\Throwable $e) {
-                        }
-                        return;
-                    }
-                    return static::unwrapGenerator($generator);
-                })
-                ->then(function ($res) use ($defer) {
-                    return $defer->resolve($res);
-                })
-                ->otherwise(function ($e) use ($generator, $defer) {
-                    try {
+            ->then(function ($res) use ($generator, $defer, $depth) {
+                try {
+                    $generator->send($res);
+                } catch (\Throwable $e) {
+                    if ($generator->valid()) {
                         $generator->throw($e);
+                    } else {
+                        throw $e;
+                    }
+                }
+                if (!$generator->valid()) {
+                    try {
+                        return $generator->getReturn();
+                    } catch (\Throwable $e) {
+                        throw $e;
+                    }
+                    return;
+                }
+                return static::unwrapGenerator($generator, $depth + 1);
+            })
+            ->otherwise(function ($e) use ($generator, $defer, $depth) {
+                try {
+                    $generator->throw($e);
+                } catch (\Throwable $e2) {
+                    if ($generator->valid()) {
+                        $generator->throw($e2);
+                    } else {
+                        throw $e2;
+                    }
+                }
+                if (!$generator->valid()) {
+                    try {
+                        return $generator->getReturn();
                     } catch (\Throwable $e2) {
-                        if ($generator->valid()) {
-                            $generator->throw($e2);
-                        } else {
-                            throw $e2;
-                        }
+                        throw $e2;
                     }
-                    if (!$generator->valid()) {
-                        try {
-                            $return = $generator->getReturn();
-                            return $defer->resolve($return);
-                        } catch (\Throwable $e) {
-                        }
-                    }
-                    return static::unwrapGenerator($generator);
-                })
-                ->then(function ($res) use ($defer) {
+                    return;
+                }
+                return static::unwrapGenerator($generator, $depth + 1);
+            })
+            ->done(
+                function ($res) use ($defer) {
                     return $defer->resolve($res);
-                })
-                ->otherwise(function ($e) use ($generator, $defer) {
-                    $defer->reject($e);
-                });
+                },
+                function ($e) use ($defer) {
+                    return $defer->reject($e);
+                }
+            );
         return $defer->promise();
     }
 
@@ -659,12 +694,14 @@ final class Async
             $reject(new CancelException());
         });
         $prom
-            ->then(function ($res) use ($defer) {
-                $defer->resolve($res);
-            })
-            ->otherwise(function ($e) use ($defer) {
-                $defer->reject($e);
-            });
+            ->done(
+                function ($res) use ($defer) {
+                    $defer->resolve($res);
+                },
+                function ($e) use ($defer) {
+                    $defer->reject($e);
+                }
+            );
         return $defer->promise();
     }
 

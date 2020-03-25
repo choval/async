@@ -53,9 +53,9 @@ class MainTest extends TestCase
         $times = 0;
         Async\wait(function () use (&$times) {
             $times++;
-            yield Async\sleep(1);
+            yield Async\sleep(0.1);
             return $times;
-        });
+        }, 1);
         $this->assertEquals(1, $times);
     }
 
@@ -83,6 +83,7 @@ class MainTest extends TestCase
         };
 
         $res = Async\wait(Async\resolve($ab));
+        var_dump($res);
         $this->assertEquals([1, 2, 3, 4, 5, 6], $res);
 
         $res = Async\wait(Async\resolve($ab()));
@@ -217,8 +218,8 @@ class MainTest extends TestCase
         $res = Async\wait(Async\resolve(function () {
             yield;
             throw new AsyncException('Oops');
-            return 'FAIL';
-        }), 1);
+            $this->assertTrue(false);
+        }), 0.5);
     }
 
 
@@ -247,6 +248,27 @@ class MainTest extends TestCase
         $this->assertGreaterThanOrEqual($delay, $diff);
     }
 
+
+
+    public function testAsyncResolveMemoryUsage()
+    {
+        $times = 20;
+        $memories = [];
+        while($times--) {
+            Async\wait(function () use (&$memories) {
+                $limit = 5000;
+                $i = 0;
+                $prev = memory_get_usage();
+                while($limit--) {
+                    yield Async\sleep(0.0000001);
+                    $i++;
+                }
+                $mem = memory_get_usage();
+                $diff = $mem - $prev;
+                $this->assertLessThanOrEqual(16384*$i, $diff);
+            });
+        }
+    }
 
 
     public function testTimeout()

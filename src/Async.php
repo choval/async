@@ -508,45 +508,25 @@ final class Async
     private static function unwrapGeneratorWithLoop(Generator $generator, LoopInterface $loop, int $depth = 0)
     {
         $promise = $generator->current();
-        try {
-            while (is_a($promise, Closure::class)) {
-                $promise = $promise();
-            }
-        } catch (\Throwable $e) {
-            return new RejectedPromise($e);
-        }
-        while (is_a($promise, Generator::class)) {
-            $promise = static::unwrapGeneratorWithLoop($promise, $loop, $depth + 1);
-        }
-        if (!is_a($promise, PromiseInterface::class)) {
-            if (!$generator->valid()) {
-                return $promise;
-            }
-            try {
-                $generator->send($promise);
-            } catch (\Throwable $e) {
-                if ($generator->valid()) {
-                    $generator->throw($e);
-                } else {
-                    return new RejectedPromise($e);
-                }
-            }
-            if (!$generator->valid()) {
-                try {
-                    return $generator->getReturn();
-                } catch (\Throwable $e) {
-                    throw $e;
-                }
-                return;
-            }
-            return static::unwrapGeneratorWithLoop($generator, $loop, $depth + 1);
-        }
         $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
             $promise->cancel();
             $generator->throw(new CancelException());
         });
         $func;
-        $func = function () use ($generator, $defer, &$promise, $loop, &$func) {
+        $func = function () use ($generator, $defer, &$promise, $loop, &$func, $depth) {
+            try {
+                while (is_a($promise, Closure::class)) {
+                    $promise = $promise();
+                }
+            } catch (\Throwable $e) {
+                $promise = new RejectedPromise($e);
+            }
+            while (is_a($promise, Generator::class)) {
+                $promise = static::unwrapGeneratorWithLoop($promise, $loop, $depth + 1);
+            }
+            if (!is_a($promise, PromiseInterface::class)) {
+                $promise = new FulfilledPromise($promise);
+            }
             $promise
                 ->done(
                     function ($res) use ($generator, $defer, &$promise, $loop, &$func) {

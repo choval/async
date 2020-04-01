@@ -215,27 +215,14 @@ function retry()
 /**
  * Resolves a Generator or Closure
  *
+ * @param LoopInterface $loop (optional)
  * @param Generator|Closure $gen
  *
  * @return Promise
  */
-function resolve($gen)
+function resolve($gen, LoopInterface $loop = null)
 {
-    return Async::resolve($gen);
-}
-
-
-
-/**
- * Alias of resolve
- *
- * @param Generator|Closure $gen
- *
- * @return Promise
- */
-function resolve_generator($gen)
-{
-    return Async::resolve($gen);
+    return Async::resolve($gen, $loop);
 }
 
 

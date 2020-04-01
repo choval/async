@@ -196,11 +196,12 @@ class MainTest extends TestCase
     public function testExceptionInsideResolve()
     {
         $res = Async\wait(Async\resolve(function () {
-            $res = true;
+            $res = false;
             try {
                 yield Async\execute('sleep 2', 1);
                 $res = false;
             } catch (\Exception $e) {
+                $res = true;
                 echo "MESSAGE CAUGHT\n";
                 echo $e->getMessage() . "\n";
             }
@@ -252,11 +253,11 @@ class MainTest extends TestCase
 
     public function testAsyncResolveMemoryUsage()
     {
-        $times = 20;
+        $times = 1;
         $memories = [];
         while($times--) {
             Async\wait(function () use (&$memories) {
-                $limit = 5000;
+                $limit = 100000;
                 $i = 0;
                 $prev = memory_get_usage();
                 while($limit--) {

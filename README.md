@@ -98,12 +98,6 @@ Async\resolve(function () {
 });
 ```
 
-Note:  
-Keep in mind `yield` creates a chain of `Promise`, therefore, if
-used inside a loop, it will rack up memory fast. ONLY the `yield`
-will generate around 16KB per loop.
-
-
 ## Functions
 
 ### is\_done
@@ -175,6 +169,11 @@ $promise = Async\resolve(function () {
 	return $sources;
 });
 ```
+
+#### Memory usage
+
+If `Async\resolve` is called without an `EventLoop` (as the second parameter), it will fall back to unwrapping the Generator by chaining promises, which can use a considerably high ammount of memory if `yield` is inside a loop.  
+Therefore, `resolve` will try to retrieve the `EventLoop` set from `Async\init` or `Async\setLoop`.
 
 ### execute
 

@@ -20,8 +20,10 @@ final class Async
     private static $loop;
     private static $forks = [];
     private static $forks_limit;
-    private static $promises = [];
+    private static $dones_promises = [];
     private static $dones = [];
+    private static $dones_res = [];
+    private static $dones_key = 0;
 
 
 
@@ -501,6 +503,91 @@ final class Async
 
 
     /**
+     * Unwraps a generator and solves yielded promises using a LoopEvent
+     */
+    private static function unwrapGeneratorWithLoop(Generator $generator, LoopInterface $loop, int $depth = 0)
+    {
+        $promise = $generator->current();
+        try {
+            while (is_a($promise, Closure::class)) {
+                $promise = $promise();
+            }
+        } catch (\Throwable $e) {
+            return new RejectedPromise($e);
+        }
+        while (is_a($promise, Generator::class)) {
+            $promise = static::unwrapGeneratorWithLoop($promise, $loop, $depth + 1);
+        }
+        if (!is_a($promise, PromiseInterface::class)) {
+            if (!$generator->valid()) {
+                return $promise;
+            }
+            try {
+                $generator->send($promise);
+            } catch (\Throwable $e) {
+                if ($generator->valid()) {
+                    $generator->throw($e);
+                } else {
+                    return new RejectedPromise($e);
+                }
+            }
+            if (!$generator->valid()) {
+                try {
+                    return $generator->getReturn();
+                } catch (\Throwable $e) {
+                    throw $e;
+                }
+                return;
+            }
+            return static::unwrapGeneratorWithLoop($generator, $loop, $depth + 1);
+        }
+        $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
+            $promise->cancel();
+            $generator->throw(new CancelException());
+        });
+        $func;
+        $func = function () use ($generator, $defer, &$promise, $loop, &$func) {
+            $res;
+            $done = static::isDoneWithLoop($loop, $promise, $res);
+            if (!$done) {
+                if ($func) {
+                    $loop->futureTick($func);
+                }
+                return;
+            }
+            try {
+                if ($done > 0) {
+                    $generator->send($res);
+                } else {
+                    $generator->throw($res);
+                }
+            } catch (\Throwable $e) {
+                if ($generator->valid()) {
+                    $generator->throw($e);
+                } else {
+                    throw $e;
+                }
+            } catch (\Throwable $e) {
+                return $defer->reject($e);
+            }
+            if (!$generator->valid()) {
+                try {
+                    $return = $generator->getReturn();
+                    return $defer->resolve($return);
+                } catch (\Throwable $e) {
+                    return $defer->reject($e);
+                }
+            }
+            $promise = $generator->current();
+            $loop->futureTick($func);
+        };
+        $loop->futureTick($func);
+        return $defer->promise();
+    }
+
+
+
+    /**
      * Unwraps a generator and solves yielded promises
      */
     private static function unwrapGenerator(Generator $generator, int $depth = 0)
@@ -510,7 +597,7 @@ final class Async
             while (is_a($promise, Closure::class)) {
                 $promise = $promise();
             }
-        } catch(\Throwable $e) {
+        } catch (\Throwable $e) {
             return new RejectedPromise($e);
         }
         while (is_a($promise, Generator::class)) {
@@ -522,8 +609,7 @@ final class Async
             }
             try {
                 $generator->send($promise);
-            }
-            catch (\Throwable $e) {
+            } catch (\Throwable $e) {
                 if ($generator->valid()) {
                     $generator->throw($e);
                 } else {
@@ -533,7 +619,7 @@ final class Async
             if (!$generator->valid()) {
                 try {
                     return $generator->getReturn();
-                } catch(\Throwable $e) {
+                } catch (\Throwable $e) {
                     throw $e;
                 }
                 return;
@@ -664,7 +750,7 @@ final class Async
      * - Promise
      * - Stream
      */
-    public static function resolve($gen)
+    public static function resolve($gen, LoopInterface $loop = null)
     {
         if (is_a($gen, Closure::class)) {
             try {
@@ -676,8 +762,15 @@ final class Async
             }
         }
         if (is_a($gen, Generator::class)) {
-            while (is_a($gen, Generator::class)) {
-                $gen = static::unwrapGenerator($gen);
+            if (is_null($loop)) {
+                $loop = static::$loop;
+            }
+            if ($loop) {
+                $gen = static::unwrapGeneratorWithLoop($gen, $loop);
+            } else {
+                while (is_a($gen, Generator::class)) {
+                    $gen = static::unwrapGenerator($gen);
+                }
             }
         }
         if (is_a($gen, ReadableStreamInterface::class)) {
@@ -758,7 +851,7 @@ final class Async
         if ($first instanceof LoopInterface) {
             $loop = array_shift($args);
         } else {
-            $loop = Async::getLoop();
+            $loop = static::getLoop();
         }
         return static::asyncWithLoop($loop, $fn, $args);
     }
@@ -842,16 +935,22 @@ final class Async
     }
     public static function isDoneWithLoop(LoopInterface $loop, PromiseInterface $promise, &$result = null)
     {
-        if (!($key = array_search($promise, static::$promises))) {
-            $key = bin2hex(random_bytes(12));
-            $func = function ($res) use ($key, $loop, &$result) {
-                $result = $res;
+        if (!($key = array_search($promise, static::$dones_promises))) {
+            $key = ++static::$dones_key;
+            $good = function ($res) use ($key, $loop) {
                 $loop->stop();
-                static::$dones[$key] = true;
-                unset(static::$promises[$key]);
+                static::$dones_res[$key] = $res;
+                static::$dones[$key] = 1;
+                unset(static::$dones_promises[$key]);
             };
-            static::$promises[$key] = $promise;
-            $promise->done($func, $func);
+            $bad = function ($e) use ($key, $loop) {
+                $loop->stop();
+                static::$dones_res[$key] = $e;
+                static::$dones[$key] = -1;
+                unset(static::$dones_promises[$key]);
+            };
+            static::$dones_promises[$key] = $promise;
+            $promise->done($good, $bad);
         }
         $loop->futureTick(function () use ($loop) {
             $loop->stop();
@@ -864,7 +963,11 @@ final class Async
             }
         }
         $res = static::$dones[$key] ?? false;
+        if ($res) {
+            $result = static::$dones_res[$key];
+        }
         unset(static::$dones[$key]);
+        unset(static::$dones_res[$key]);
         return $res;
     }
 }

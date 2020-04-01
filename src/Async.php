@@ -547,39 +547,55 @@ final class Async
         });
         $func;
         $func = function () use ($generator, $defer, &$promise, $loop, &$func) {
-            $res;
-            $done = static::isDoneWithLoop($loop, $promise, $res);
-            if (!$done) {
-                if ($func) {
-                    $loop->futureTick($func);
-                }
-                return;
-            }
-            try {
-                if ($done > 0) {
-                    $generator->send($res);
-                } else {
-                    $generator->throw($res);
-                }
-            } catch (\Throwable $e) {
-                if ($generator->valid()) {
-                    $generator->throw($e);
-                } else {
-                    throw $e;
-                }
-            } catch (\Throwable $e) {
-                return $defer->reject($e);
-            }
-            if (!$generator->valid()) {
-                try {
-                    $return = $generator->getReturn();
-                    return $defer->resolve($return);
-                } catch (\Throwable $e) {
-                    return $defer->reject($e);
-                }
-            }
-            $promise = $generator->current();
-            $loop->futureTick($func);
+            $promise
+                ->done(
+                    function ($res) use ($generator, $defer, &$promise, $loop, &$func) {
+                        try {
+                            $generator->send($res);
+                        } catch (\Throwable $e) {
+                            if ($generator->valid()) {
+                                $generator->throw($e);
+                            } else {
+                                throw $e;
+                            }
+                        } catch (\Throwable $e) {
+                            return $defer->reject($e);
+                        }
+                        if (!$generator->valid()) {
+                            try {
+                                $return = $generator->getReturn();
+                                return $defer->resolve($return);
+                            } catch (\Throwable $e) {
+                                return $defer->reject($e);
+                            }
+                        }
+                        $promise = $generator->current();
+                        $loop->futureTick($func);
+                    },
+                    function ($e) use ($generator, $defer, &$promise, $loop, &$func) {
+                        try {
+                            $generator->throw($e);
+                        } catch (\Throwable $e) {
+                            if ($generator->valid()) {
+                                $generator->throw($e);
+                            } else {
+                                throw $e;
+                            }
+                        } catch (\Throwable $e) {
+                            return $defer->reject($e);
+                        }
+                        if (!$generator->valid()) {
+                            try {
+                                $return = $generator->getReturn();
+                                return $defer->resolve($return);
+                            } catch (\Throwable $e) {
+                                return $defer->reject($e);
+                            }
+                        }
+                        $promise = $generator->current();
+                        $loop->futureTick($func);
+                    }
+                );
         };
         $loop->futureTick($func);
         return $defer->promise();

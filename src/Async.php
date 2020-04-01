@@ -953,6 +953,9 @@ final class Async
     {
         if (!($key = array_search($promise, static::$dones_promises))) {
             $key = ++static::$dones_key;
+            if ($key === PHP_INT_MAX) {
+                static::$dones_key = 0;
+            }
             $good = function ($res) use ($key, $loop) {
                 $loop->stop();
                 static::$dones_res[$key] = $res;

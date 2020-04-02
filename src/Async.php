@@ -556,12 +556,6 @@ final class Async
                         try {
                             $generator->throw($e);
                         } catch (\Throwable $e) {
-                            if ($generator->valid()) {
-                                $generator->throw($e);
-                            } else {
-                                throw $e;
-                            }
-                        } catch (\Throwable $e) {
                             return $defer->reject($e);
                         }
                         if (!$generator->valid()) {

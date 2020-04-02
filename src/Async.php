@@ -258,7 +258,7 @@ final class Async
                         $chunk = trim($chunk);
                         $lines = explode("\n", $chunk);
                         foreach ($lines as $line) {
-                            echo $first . $line . "\n";
+                            fwrite(STDOUT, $first . $line . "\n");
                         }
                     }
                 });
@@ -509,7 +509,9 @@ final class Async
     {
         $promise = $generator->current();
         $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
-            $promise->cancel();
+            if (is_a($promise, PromiseInterface::class)) {
+                $promise->cancel();
+            }
             $generator->throw(new CancelException());
         });
         $func;
@@ -518,56 +520,44 @@ final class Async
                 while (is_a($promise, Closure::class)) {
                     $promise = $promise();
                 }
+                while (is_a($promise, Generator::class)) {
+                    $promise = static::unwrapGeneratorWithLoop($promise, $loop, $depth + 1);
+                }
             } catch (\Throwable $e) {
                 $promise = new RejectedPromise($e);
-            }
-            while (is_a($promise, Generator::class)) {
-                $promise = static::unwrapGeneratorWithLoop($promise, $loop, $depth + 1);
             }
             if (!is_a($promise, PromiseInterface::class)) {
                 $promise = new FulfilledPromise($promise);
             }
             $promise
-                ->done(
+                ->then(
                     function ($res) use ($generator, $defer, &$promise, $loop, &$func) {
                         try {
                             $generator->send($res);
-                        } catch (\Throwable $e) {
                             if ($generator->valid()) {
-                                $generator->throw($e);
+                                $promise = $generator->current();
+                                $loop->futureTick($func);
                             } else {
-                                throw $e;
+                                $return = $generator->getReturn();
+                                return $defer->resolve($return);
                             }
                         } catch (\Throwable $e) {
                             return $defer->reject($e);
                         }
-                        if (!$generator->valid()) {
-                            try {
-                                $return = $generator->getReturn();
-                                return $defer->resolve($return);
-                            } catch (\Throwable $e) {
-                                return $defer->reject($e);
-                            }
-                        }
-                        $promise = $generator->current();
-                        $loop->futureTick($func);
                     },
                     function ($e) use ($generator, $defer, &$promise, $loop, &$func) {
                         try {
                             $generator->throw($e);
+                            if ($generator->valid()) {
+                                $promise = $generator->current();
+                                $loop->futureTick($func);
+                            } else {
+                                $return = $generator->getReturn();
+                                return $defer->resolve($return);
+                            }
                         } catch (\Throwable $e) {
                             return $defer->reject($e);
                         }
-                        if (!$generator->valid()) {
-                            try {
-                                $return = $generator->getReturn();
-                                return $defer->resolve($return);
-                            } catch (\Throwable $e) {
-                                return $defer->reject($e);
-                            }
-                        }
-                        $promise = $generator->current();
-                        $loop->futureTick($func);
                     }
                 );
         };
@@ -617,7 +607,9 @@ final class Async
             return static::unwrapGenerator($generator, $depth + 1);
         }
         $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
-            $promise->cancel();
+            if (is_a($promise, PromiseInterface::class)) {
+                $promise->cancel();
+            }
             // $reject(new CancelException());
             $generator->throw(new CancelException());
         });
@@ -773,7 +765,9 @@ final class Async
         $canceled = false;
         $defer = new Deferred(function ($resolve, $reject) use ($prom, &$canceled) {
             $canceled = true;
-            $prom->cancel();
+            if (is_a($prom, PromiseInterface::class)) {
+                $prom->cancel();
+            }
             $reject(new CancelException());
         });
         $prom

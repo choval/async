@@ -113,7 +113,7 @@ final class Async
             }
             yield Promise\any(static::$forks);
             return true;
-        });
+        }, $loop);
     }
 
 
@@ -160,9 +160,9 @@ final class Async
     {
         $res = null;
         $err = null;
-        $promise = static::resolve($promise);
+        $promise = static::resolve($promise, $loop);
         if (!is_null($timeout)) {
-            $promise = static::timeout($promise, $timeout, $loop);
+            $promise = static::timeoutWithLoop($loop, $promise, $timeout);
         }
         $final = $promise->then(
             function ($r) use (&$res) {
@@ -308,7 +308,7 @@ final class Async
         if (is_a($func, PromiseInterface::class)) {
             $promise = $func;
         } else {
-            $promise = static::resolve($func);
+            $promise = static::resolve($func, $loop);
         }
         $defer = new Deferred(function ($resolve, $reject) use ($promise) {
             $promise->cancel();
@@ -382,9 +382,9 @@ final class Async
             }
         };
         $retries--;
-        $promise = static::resolve($func);
+        $promise = static::resolve($func, $loop);
         $promise->done($goodcb, $badcb);
-        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($func, &$retries, $ignore_errors, &$error, $defer, &$promise, &$trace, $goodcb, $badcb) {
+        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($func, &$retries, $ignore_errors, &$error, $defer, &$promise, &$trace, $goodcb, $badcb, $loop) {
             if (is_null($promise)) {
                 if ($retries < 0) {
                     if (empty($error)) {
@@ -393,7 +393,7 @@ final class Async
                     return $defer->reject($error);
                 }
                 $retries--;
-                $promise = static::resolve($func);
+                $promise = static::resolve($func, $loop);
                 $promise->done($goodcb, $badcb);
             }
         });
@@ -585,7 +585,7 @@ final class Async
         }
         if (!is_a($promise, PromiseInterface::class)) {
             if (!$generator->valid()) {
-                return $promise;
+                return $generator->getReturn();
             }
             try {
                 $generator->send($promise);
@@ -596,15 +596,10 @@ final class Async
                     return new RejectedPromise($e);
                 }
             }
-            if (!$generator->valid()) {
-                try {
-                    return $generator->getReturn();
-                } catch (\Throwable $e) {
-                    throw $e;
-                }
-                return;
+            if ($generator->valid()) {
+                return static::unwrapGenerator($generator, $depth + 1);
             }
-            return static::unwrapGenerator($generator, $depth + 1);
+            return $generator->getReturn();
         }
         $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
             if (is_a($promise, PromiseInterface::class)) {
@@ -614,46 +609,38 @@ final class Async
             $generator->throw(new CancelException());
         });
         $promise
-            ->then(function ($res) use ($generator, $defer, $depth) {
-                try {
-                    $generator->send($res);
-                } catch (\Throwable $e) {
-                    if ($generator->valid()) {
-                        $generator->throw($e);
-                    } else {
-                        throw $e;
-                    }
-                }
-                if (!$generator->valid()) {
+            ->then(
+                function ($res) use ($generator, $defer, $depth) {
                     try {
-                        return $generator->getReturn();
+                        $generator->send($res);
                     } catch (\Throwable $e) {
-                        throw $e;
+                        if ($generator->valid()) {
+                            $generator->throw($e);
+                        } else {
+                            throw $e;
+                        }
                     }
-                    return;
-                }
-                return static::unwrapGenerator($generator, $depth + 1);
-            })
-            ->otherwise(function ($e) use ($generator, $defer, $depth) {
-                try {
-                    $generator->throw($e);
-                } catch (\Throwable $e2) {
                     if ($generator->valid()) {
-                        $generator->throw($e2);
-                    } else {
-                        throw $e2;
+                        return static::unwrapGenerator($generator, $depth + 1);
                     }
-                }
-                if (!$generator->valid()) {
+                    return $generator->getReturn();
+                },
+                function ($e) use ($generator, $defer, $depth) {
                     try {
-                        return $generator->getReturn();
+                        $generator->throw($e);
                     } catch (\Throwable $e2) {
-                        throw $e2;
+                        if ($generator->valid()) {
+                            $generator->throw($e2);
+                        } else {
+                            throw $e2;
+                        }
                     }
-                    return;
+                    if ($generator->valid()) {
+                        return static::unwrapGenerator($generator, $depth + 1);
+                    }
+                    return $generator->getReturn();
                 }
-                return static::unwrapGenerator($generator, $depth + 1);
-            })
+            )
             ->done(
                 function ($res) use ($defer) {
                     return $defer->resolve($res);
@@ -906,7 +893,7 @@ final class Async
                 $files = array_merge($files, $tmp);
             }
             return $files;
-        });
+        }, $loop);
     }
 
 

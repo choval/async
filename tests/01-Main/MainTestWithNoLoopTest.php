@@ -8,86 +8,44 @@ use React\EventLoop\Factory;
 use React\Promise;
 use React\Promise\Deferred;
 
-class MainTest extends TestCase
+class MainTestWithNoLoopTest extends TestCase
 {
     public static $loop;
 
     public static function setUpBeforeClass(): void
     {
         static::$loop = Factory::create();
-        Async\set_loop(static::$loop);
     }
-
-
-
-    public function testIsDone()
-    {
-        $loop = Async\get_loop();
-        $defer = new Deferred();
-        $loop->addTimer(0.1, function () use ($defer) {
-            $defer->resolve(true);
-        });
-        $promise = $defer->promise();
-        $i = 0;
-        while( ! Async\is_done($promise) ) {
-            $i++;
-        }
-        echo "Looped $i until the promise solved in 0.1 sec\n";
-        $this->assertGreaterThan(100, $i);
-    }
-
-
-    public function testSync()
-    {
-        $rand = rand();
-
-        $defer = new Deferred();
-        $defer->resolve($rand);
-        $res = Async\sync($defer->promise());
-        $this->assertEquals($rand, $res);
-
-        $res = Async\wait($defer->promise());
-        $this->assertEquals($rand, $res);
-
-        $times = 0;
-        Async\wait(function () use (&$times) {
-            $times++;
-            yield Async\sleep(0.1);
-            return $times;
-        }, 1);
-        $this->assertEquals(1, $times);
-    }
-
 
 
     public function testResolveGenerator()
     {
         $rand = rand();
         $func = function () use ($rand) {
-            $var = yield Async\execute('echo ' . $rand);
+            $var = yield Async\execute(static::$loop, 'echo ' . $rand);
             return 'yield+' . $var;
         };
-        $res = Async\wait(Async\resolve($func()));
+        $res = Async\wait(static::$loop, Async\resolve($func()));
         $this->assertEquals('yield+' . $rand, trim($res));
 
         $ab = function () {
             $out = [];
-            $out[] = (int) trim(yield Async\execute('echo 1'));
-            $out[] = (int) trim(yield Async\execute('echo 2'));
-            $out[] = (int) trim(yield Async\execute('echo 3'));
-            $out[] = (int) trim(yield Async\execute('echo 4'));
-            $out[] = (int) trim(yield Async\execute('echo 5'));
-            $out[] = (int) trim(yield Async\execute('echo 6'));
+            $out[] = (int) trim(yield Async\execute(static::$loop, 'echo 1'));
+            $out[] = (int) trim(yield Async\execute(static::$loop, 'echo 2'));
+            $out[] = (int) trim(yield Async\execute(static::$loop, 'echo 3'));
+            $out[] = (int) trim(yield Async\execute(static::$loop, 'echo 4'));
+            $out[] = (int) trim(yield Async\execute(static::$loop, 'echo 5'));
+            $out[] = (int) trim(yield Async\execute(static::$loop, 'echo 6'));
             return $out;
         };
 
-        $res = Async\wait(Async\resolve($ab));
+        $res = Async\wait(static::$loop, Async\resolve($ab));
         $this->assertEquals([1, 2, 3, 4, 5, 6], $res);
 
-        $res = Async\wait(Async\resolve($ab()));
+        $res = Async\wait(static::$loop, Async\resolve($ab()));
         $this->assertEquals([1, 2, 3, 4, 5, 6], $res);
 
-        $res = Async\wait(Async\resolve(function () use ($ab) {
+        $res = Async\wait(static::$loop, Async\resolve(function () use ($ab) {
             return yield $ab();
         }));
         $this->assertEquals([1, 2, 3, 4, 5, 6], $res);
@@ -100,7 +58,7 @@ class MainTest extends TestCase
         $i = 0;
         $func = function () use (&$i) {
             while ($i < 3) {
-                yield Async\sleep(0.5);
+                yield Async\sleep(static::$loop, 0.5);
                 $i++;
                 echo "testResolveCancel $i\n";
             }
@@ -113,7 +71,7 @@ class MainTest extends TestCase
             $prom->cancel();
         });
         $this->expectException(CancelException::class);
-        $res = Async\wait($prom);
+        $res = Async\wait(static::$loop, $prom);
         $this->assertLessThan(3, $res);
         $this->assertLessThan(3, $i);
     }
@@ -125,11 +83,11 @@ class MainTest extends TestCase
         function a()
         {
             return Async\resolve(function () {
-                yield Async\sleep(1);
+                yield Async\sleep(MainTestWithNoLoopTest::$loop, 1);
                 return true;
             });
         }
-        $res = Async\wait(a(), 2);
+        $res = Async\wait(static::$loop, a(), 2);
         $this->assertTrue($res);
     }
 
@@ -139,13 +97,13 @@ class MainTest extends TestCase
     {   
         $rand = rand();
         $func = function () use ($rand) {
-            $var = yield Async\execute('echo ' . $rand);
+            $var = yield Async\execute(static::$loop, 'echo ' . $rand);
             $var = trim($var);
             throw new \Exception($var);
             return 'fail';
         };
         try {
-            $msg = Async\wait(Async\resolve($func), 1);
+            $msg = Async\wait(static::$loop, Async\resolve($func), 1);
         } catch (\Exception $e) {
             $msg = $e->getMessage();
         }
@@ -162,14 +120,14 @@ class MainTest extends TestCase
         
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Crap');
-        $msg = Async\wait(Async\resolve($func3), 1);
+        $msg = Async\wait(static::$loop, Async\resolve($func3), 1);
     }
 
 
 
     public function testResolveWithNonExistingFunction()
     {
-        Async\wait(Async\resolve(function () {
+        Async\wait(static::$loop, Async\resolve(function () {
             yield Async\resolve(function () {
                 $this->expectException(\Throwable::class);
                 calling_non_existing_function();
@@ -181,7 +139,7 @@ class MainTest extends TestCase
 
     public function testResolveWithNonExistingClassMethod()
     {
-        Async\wait(Async\resolve(function () {
+        Async\wait(static::$loop, Async\resolve(function () {
             yield Async\resolve(function () {
                 $this->expectException(\Throwable::class);
                 TestResolveClass::non_existing_method();
@@ -193,10 +151,10 @@ class MainTest extends TestCase
 
     public function testExceptionInsideResolve()
     {
-        $res = Async\wait(Async\resolve(function () {
+        $res = Async\wait(static::$loop, Async\resolve(function () {
             $res = false;
             try {
-                yield Async\execute('sleep 2', 1);
+                yield Async\execute(static::$loop, 'sleep 2', 1);
                 $res = false;
             } catch (\Exception $e) {
                 $res = true;
@@ -214,7 +172,7 @@ class MainTest extends TestCase
     public function testExceptionThrowInsideResolve()
     {
         $this->expectException(AsyncException::class);
-        $res = Async\wait(Async\resolve(function () {
+        $res = Async\wait(static::$loop, Async\resolve(function () {
             yield;
             throw new AsyncException('Oops');
             $this->assertTrue(false);
@@ -226,7 +184,7 @@ class MainTest extends TestCase
     public function testExceptionThrowInsideMultipleResolve()
     {
         $this->expectException(AsyncException::class);
-        $res = Async\wait(Async\resolve(function () {
+        $res = Async\wait(static::$loop, Async\resolve(function () {
             yield Async\resolve(function () {
                 yield;
                 throw new AsyncException('OopsMultiple');
@@ -272,7 +230,7 @@ class MainTest extends TestCase
             $res++;
             return $res;
         };
-        Async\wait(function() use ($func7) {
+        Async\wait(static::$loop, function() use ($func7) {
             $a = yield $func7;
             $this->assertEquals(7, $a);
         });
@@ -285,16 +243,16 @@ class MainTest extends TestCase
         $func = function($defer) {
             yield false;
             $i=0;
-            $loop = Async\get_loop();
+            $loop = static::$loop;
             $loop->addPeriodicTimer(0.001, function($timer) use (&$i, $defer) {
                 $i++;
                 if ($i >= 1000) {
                     $defer->resolve($i);
-                    Async\get_loop()->cancelTimer($timer);
+                    static::$loop->cancelTimer($timer);
                 }
             });
         };
-        return Async\wait(function() use ($func) {
+        return Async\wait(static::$loop, function() use ($func) {
             yield true;
             $defer = new Deferred();
             yield $func($defer);
@@ -305,29 +263,17 @@ class MainTest extends TestCase
 
 
 
-    public function testSleep()
-    {
-        $delay = 0.5;
-
-        $start = microtime(true);
-        Async\wait(Async\sleep($delay));
-        $diff = microtime(true) - $start;
-        $this->assertGreaterThanOrEqual($delay, $diff);
-    }
-
-
-
     public function testAsyncResolveMemoryUsage()
     {
         $times = 1;
         $memories = [];
         while($times--) {
-            Async\wait(function () use (&$memories) {
+            Async\wait(static::$loop, function () use (&$memories) {
                 $limit = 100000;
                 $i = 0;
                 $prev = memory_get_usage();
                 while($limit--) {
-                    yield Async\sleep(0.0000001);
+                    yield Async\sleep(static::$loop, 0.0000001);
                     $i++;
                 }
                 $mem = memory_get_usage();
@@ -344,7 +290,7 @@ class MainTest extends TestCase
         $promise = $defer->promise();
         $this->expectException(AsyncException::class);
         $this->expectExceptionMessage('Timed out after 0.5 secs');
-        $res = Async\wait(Async\timeout($promise, 0.5), 1);
+        $res = Async\wait(static::$loop, Async\timeout(static::$loop, $promise, 0.5), 1);
     }
 
 

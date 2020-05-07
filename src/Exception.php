@@ -39,10 +39,12 @@ class Exception extends RootException
         $out = '';
         foreach ($this->trace as $pos => $row) {
             if (empty($row['line'])) {
-                $out .= "#{$pos} {$row['file']}(Unknown line)";
-            } else {
-                $out .= "#{$pos} {$row['file']}({$row['line']})";
+                $row['line'] = 'Unknown line';
             }
+            if (empty($row['file'])) {
+                $row['file'] = 'Unknown file';
+            }
+            $out .= "#{$pos} {$row['file']}({$row['line']})";
             if (isset($row['class']) && isset($row['function'])) {
                 $out .= ": {$row['class']}\\{$row['function']}()";
             } elseif (isset($row['function'])) {

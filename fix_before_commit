@@ -1,2 +1,3 @@
 #!/bin/bash
-vendor/bin/ecs check src  --fix
+php-cs-fixer fix -v src && \
+php-cs-fixer fix -v tests

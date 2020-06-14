@@ -25,7 +25,6 @@
         "react/event-loop": "^1.1"
     },
     "require-dev": {
-        "symplify/easy-coding-standard": "^7.0",
         "phpunit/phpunit": "^8"
     }
 }

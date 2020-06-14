@@ -24,6 +24,7 @@ final class Async
     private static $dones = [];
     private static $dones_res = [];
     private static $dones_key = 0;
+    private static $mem_limit;
 
 
 
@@ -35,6 +36,46 @@ final class Async
     public static function setLoop(LoopInterface $loop)
     {
         static::$loop = $loop;
+        static::loadMemLimit();
+    }
+
+
+
+    /**
+     *
+     * Loads the memory limit from ini
+     *
+     */
+    public static function loadMemLimit($limit=null)
+    {
+        if (is_null($limit)) {
+            $limit = ini_get('memory_limit');
+            if ($limit < 0) {
+                return;
+            }
+        }
+        $limit_n = (int)$limit;
+        $limit_u = str_replace($limit_n, '', $limit);
+        $limit = $limit_n;
+        switch($limit_u) {
+            case 'T':
+            case 'TB':
+                $limit = $limit * 1024;
+            case 'G':
+            case 'GB':
+                $limit = $limit * 1024;
+            case 'M':
+            case 'MB':
+                $limit = $limit * 1024;
+            case 'K':
+            case 'KB':
+                $limit = $limit * 1024;
+                break;
+        }
+        if ($limit) {
+            static::$mem_limit = $limit;
+        }
+        return static::$mem_limit;
     }
 
 
@@ -943,5 +984,45 @@ final class Async
         unset(static::$dones[$key]);
         unset(static::$dones_res[$key]);
         return $res;
+    }
+
+
+
+    /**
+     * Waits for this memory space
+     */
+    public static function waitMemory(float $bytes, float $freq=0.000001)
+    {
+        return static::waitMemoryWithLoop(static::getLoop(), $bytes, $freq);
+    }
+    public static function waitMemoryWithLoop(LoopInterface $loop, float $bytes, float $freq=0.000001)
+    {
+        $bytes += 16384;    // Required memory for this wait
+        if (is_null(static::$mem_limit)) {
+            throw new Exception('Memory limit not available, please set it manually using `loadMemLimit`');
+        }
+        $usage = memory_get_usage();
+        $diff = static::$mem_limit - $usage;
+        if ($diff >= $bytes) {
+            return $diff;
+        }
+        $timer = null;
+        $defer = new Deferred(function ($resolve, $reject) use (&$timer, $loop) {
+            if ($timer) {
+                $loop->cancelTimer($timer);
+            }
+            $promise->cancel();
+            $reject(new CancelException());
+        });
+        $timer = $loop->addPeriodicTimer($freq, function ($timer) use ($defer, $bytes, $loop) {
+            $usage = memory_get_usage();
+            $diff = static::$mem_limit - $usage;
+            if ($diff >= $bytes) {
+                $loop->cancelTimer($timer);
+                $defer->resolve($diff);
+                unset($defer);
+            }
+        });
+        return $defer->promise();
     }
 }

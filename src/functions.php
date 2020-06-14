@@ -32,6 +32,20 @@ function init()
 
 
 /**
+ * Loads a memory limit
+ * This is called automatically on set_loop/init
+ *
+ * @param string limit
+ * @return int bytes
+ */
+function load_memory_limit($limit=null)
+{
+    return Async::loadMemoryLimit($limit);
+}
+
+
+
+/**
  * Sets the loop
  *
  * @param LoopInterface $loop
@@ -421,4 +435,20 @@ function is_done()
         array_unshift($args, $loop);
     }
     return call_user_func_array([Async::class, 'isDoneWithLoop'], $args);
+}
+
+
+/**
+ * Waits for an amount of bytes
+ * before resolving.
+ */
+function wait_memory()
+{
+    $args = func_get_args();
+    $first = current($args);
+    if (!($first instanceof LoopInterface)) {
+        $loop = Async::getLoop();
+        array_unshift($args, $loop);
+    }
+    return call_user_func_array([Async::class, 'waitMemoryWithLoop'], $args);
 }

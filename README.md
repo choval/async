@@ -15,6 +15,7 @@ A library to ease handling promises in [ReactPHP](https://reactphp.org).
   * [async](#async) Run blocking code in async mode
   * [retry](#retry) Retry a function multiple times
   * [timeout](#timeout) Adds a timeout to a Promise
+  * [wait\_memory](#wait_memory) Waits for a number of RAM bytes to be available
   * [PHP file functions](#file_functions) PHP's blocking file functions in async mode
 
 
@@ -24,6 +25,9 @@ A library to ease handling promises in [ReactPHP](https://reactphp.org).
 composer require choval/async
 ```
 
+## Notes
+
+Tested on PHP 7.2 and PHP 7.3. Currently used in production systems. Untested on PHP 7.4.
 
 ## Usage
 
@@ -314,6 +318,26 @@ $func = function () {
 Async\wait(Async\timeout($func, 1.5));
 // Throws an Exception due to the timeout 1.5 < 2
 ```
+
+
+### wait\_memory
+
+Waits for a number of memory bytes to be available.  
+This is used inside loops to avoid memory exhaution due to multiple Promises being created and left in background.
+
+```php
+Async\wait(function () {
+    $loop = 20000;
+    $mem = 1024*1024*16; // 16MB
+    while($loop--) {
+        yield Async\waitMemory($mem);
+        Async\sleep(1);
+    }
+});
+```
+
+A second parameter can be passed for the frequency to run the check.  
+Returns the number of bytes remaining (`memory_limit` - `memory_get_usage()`).
 
 ### rglob
 

@@ -40,7 +40,7 @@ class FilesTest extends TestCase
             $start = microtime(true);
             $file = __FILE__;
             $orig = $times = 20;
-            while(--$times) {
+            while (--$times) {
                 $res = yield Async\is_file($file);
                 $this->assertTrue($res);
             }
@@ -63,7 +63,7 @@ class FilesTest extends TestCase
             $written = yield Async\file_put_contents($tmp, $random);
             $this->assertEquals(strlen($random), $written);
 
-            $this->assertTrue( yield Async\file_exists($tmp) );
+            $this->assertTrue(yield Async\file_exists($tmp));
 
             $data = yield Async\file_get_contents($tmp);
             $this->assertEquals($random, $data);
@@ -72,7 +72,7 @@ class FilesTest extends TestCase
             $this->assertEquals($time, $data);
 
             $data = yield Async\sha1_file($tmp);
-            $this->assertEquals( sha1_file($tmp), $data);
+            $this->assertEquals(sha1_file($tmp), $data);
 
             yield Async\unlink($tmp);
 

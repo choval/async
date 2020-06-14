@@ -57,16 +57,19 @@ final class Async
         $limit_n = (int)$limit;
         $limit_u = str_replace($limit_n, '', $limit);
         $limit = $limit_n;
-        switch($limit_u) {
+        switch ($limit_u) {
             case 'T':
             case 'TB':
                 $limit = $limit * 1024;
+                // no break
             case 'G':
             case 'GB':
                 $limit = $limit * 1024;
+                // no break
             case 'M':
             case 'MB':
                 $limit = $limit * 1024;
+                // no break
             case 'K':
             case 'KB':
                 $limit = $limit * 1024;

@@ -29,10 +29,10 @@ class WaitMemoryTest extends TestCase
             $sets = round( $mem_req / $size * 0.8);
             $loop = round( $free / $size * 1.1 / $sets );
              */
-            $loops = $loop = round( $free / $size * 1.1 );
+            $loops = $loop = round($free / $size * 1.1);
             $min = $free;
             $start = time();
-            while($loop--) {
+            while ($loop--) {
                 $free = yield Async\wait_memory($mem_req, 0.1);
                 if ($free < $min) {
                     $min = $free;

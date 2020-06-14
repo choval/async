@@ -52,7 +52,9 @@ class RetryTest extends TestCase
     public function testRetryImmediateResponse()
     {
         $start = microtime(true);
-        $res = Async\wait(Async\retry(function() { return true; }, 1, 2));
+        $res = Async\wait(Async\retry(function () {
+            return true;
+        }, 1, 2));
         $end = microtime(true);
         $diff = $end-$start;
         $this->assertLessThan(0.1, $diff);

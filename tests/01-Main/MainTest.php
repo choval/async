@@ -29,7 +29,7 @@ class MainTest extends TestCase
         });
         $promise = $defer->promise();
         $i = 0;
-        while( ! Async\is_done($promise) ) {
+        while (! Async\is_done($promise)) {
             $i++;
         }
         echo "Looped $i until the promise solved in 0.1 sec\n";
@@ -136,7 +136,7 @@ class MainTest extends TestCase
 
 
     public function testResolveWithException()
-    {   
+    {
         $rand = rand();
         $func = function () use ($rand) {
             $var = yield Async\execute('echo ' . $rand);
@@ -239,40 +239,40 @@ class MainTest extends TestCase
 
     public function testResolveDepth()
     {
-        $func1 = function() {
+        $func1 = function () {
             return yield 1;
         };
-        $func2 = function() use ($func1) {
+        $func2 = function () use ($func1) {
             $res = yield $func1;
             $res++;
             return $res;
         };
-        $func3 = function() use ($func2) {
+        $func3 = function () use ($func2) {
             $res = yield $func2;
             $res++;
             return $res;
         };
-        $func4 = function() use ($func3) {
+        $func4 = function () use ($func3) {
             $res = yield $func3;
             $res++;
             return $res;
         };
-        $func5 = function() use ($func4) {
+        $func5 = function () use ($func4) {
             $res = yield $func4;
             $res++;
             return $res;
         };
-        $func6 = function() use ($func5) {
+        $func6 = function () use ($func5) {
             $res = yield $func5;
             $res++;
             return $res;
         };
-        $func7 = function() use ($func6) {
+        $func7 = function () use ($func6) {
             $res = yield $func6;
             $res++;
             return $res;
         };
-        Async\wait(function() use ($func7) {
+        Async\wait(function () use ($func7) {
             $a = yield $func7;
             $this->assertEquals(7, $a);
         });
@@ -282,11 +282,11 @@ class MainTest extends TestCase
 
     public function testTimerInsideResolveMess()
     {
-        $func = function($defer) {
+        $func = function ($defer) {
             yield false;
             $i=0;
             $loop = Async\get_loop();
-            $loop->addPeriodicTimer(0.001, function($timer) use (&$i, $defer) {
+            $loop->addPeriodicTimer(0.001, function ($timer) use (&$i, $defer) {
                 $i++;
                 if ($i >= 1000) {
                     $defer->resolve($i);
@@ -294,7 +294,7 @@ class MainTest extends TestCase
                 }
             });
         };
-        return Async\wait(function() use ($func) {
+        return Async\wait(function () use ($func) {
             yield true;
             $defer = new Deferred();
             yield $func($defer);
@@ -321,12 +321,12 @@ class MainTest extends TestCase
     {
         $times = 1;
         $memories = [];
-        while($times--) {
+        while ($times--) {
             Async\wait(function () use (&$memories) {
                 $limit = 100000;
                 $i = 0;
                 $prev = memory_get_usage();
-                while($limit--) {
+                while ($limit--) {
                     yield Async\sleep(0.0000001);
                     $i++;
                 }

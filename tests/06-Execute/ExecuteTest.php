@@ -48,4 +48,22 @@ class ExecuteTest extends TestCase
         $this->expectException(\Exception::class);
         $res = Async\wait(Async\execute('sleep 1', 0.5));
     }
+
+
+    public function testZombies()
+    {
+        Async\wait(function() {
+            $pid = getmypid();
+            $min = $pid-100;
+            $max = $pid+100;
+            for($i=$min;$i<$max;$i++) {
+                try {
+                    yield Async\execute('ps -o pid,comm -p '.$i);
+                } catch(\Exception $e) {
+                }
+            }
+            $this->expectException(AsyncException::class);
+            $zombies = yield Async\execute('ps aux|grep " Z "|grep -v "grep"');
+        });
+    }
 }

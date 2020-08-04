@@ -580,7 +580,7 @@ final class Async
                             $generator->send($res);
                             if ($generator->valid()) {
                                 $promise = $generator->current();
-                                $loop->futureTick($func);
+                                $loop->addTimer(0, $func);
                             } else {
                                 $return = $generator->getReturn();
                                 return $defer->resolve($return);
@@ -594,7 +594,7 @@ final class Async
                             $generator->throw($e);
                             if ($generator->valid()) {
                                 $promise = $generator->current();
-                                $loop->futureTick($func);
+                                $loop->addTimer(0, $func);
                             } else {
                                 $return = $generator->getReturn();
                                 return $defer->resolve($return);
@@ -605,7 +605,7 @@ final class Async
                     }
                 );
         };
-        $loop->futureTick($func);
+        $loop->addTimer(0, $func);
         return $defer->promise();
     }
 
@@ -970,7 +970,7 @@ final class Async
             static::$dones_promises[$key] = $promise;
             $promise->done($good, $bad);
         }
-        $loop->futureTick(function () use ($loop) {
+        $loop->addTimer(0, function () use ($loop) {
             $loop->stop();
         });
         try {

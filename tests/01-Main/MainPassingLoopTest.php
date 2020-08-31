@@ -8,7 +8,7 @@ use React\EventLoop\Factory;
 use React\Promise;
 use React\Promise\Deferred;
 
-class MainTestWithNoLoopTest extends TestCase
+class MainPassingLoopTest extends TestCase
 {
     public static $loop;
 
@@ -83,7 +83,7 @@ class MainTestWithNoLoopTest extends TestCase
         function a()
         {
             return Async\resolve(function () {
-                yield Async\sleep(MainTestWithNoLoopTest::$loop, 1);
+                yield Async\sleep(MainPassingLoopTest::$loop, 1);
                 return true;
             });
         }

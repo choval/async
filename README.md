@@ -9,6 +9,7 @@ A library to ease handling promises in [ReactPHP](https://reactphp.org).
 * Functions
   * [is\_done](#is_done) Instantly return if the Promise is resolved or rejected
   * [resolve](#resolve) Use yield with promises!
+  * [silent](#silent) Silently resolve
   * [execute](#execute) Execute a command
   * [sleep](#sleep) Non-blocking sleep
   * [wait](#wait) Make async code synchronous
@@ -178,6 +179,20 @@ $promise = Async\resolve(function () {
 
 If `Async\resolve` is called without an `EventLoop` (as the second parameter), it will fall back to unwrapping the Generator by chaining promises, which can use a considerably high ammount of memory if `yield` is inside a loop.  
 Therefore, `resolve` will try to retrieve the `EventLoop` set from `Async\init` or `Async\setLoop`.
+
+### silent
+
+Similar to `resolve`, but will catch any `Exception` and save it in the second parameter.  
+If it fails, the promise will resolve with null.
+
+```php
+$fn = function () {
+    throw new \Exception('hey!');
+};
+$promise = Async\silent($fn, $e);
+// Promise resolves with null
+// $e will hold an the hey! exception
+```
 
 ### execute
 

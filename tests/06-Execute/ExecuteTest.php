@@ -50,20 +50,13 @@ class ExecuteTest extends TestCase
     }
 
 
-    public function testZombies()
+    public function testZombieGeneratedWhenPromiseCanceled()
     {
-        Async\wait(function() {
-            $pid = getmypid();
-            $min = $pid-100;
-            $max = $pid+100;
-            for($i=$min;$i<$max;$i++) {
-                try {
-                    yield Async\execute('ps -o pid,comm -p '.$i);
-                } catch(\Exception $e) {
-                }
-            }
-            $this->expectException(AsyncException::class);
-            $zombies = yield Async\execute('ps aux|grep " Z "|grep -v "grep"');
+        Async\wait(function () {
+            $e = '';
+            $res = yield Async\silent(Async\timeout(Async\execute('sleep 1'), 0.1), $e);
+            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $this->assertEmpty($zombies);
         });
     }
 }

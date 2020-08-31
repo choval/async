@@ -338,6 +338,23 @@ class MainTest extends TestCase
     }
 
 
+    public function testAsyncResolveSilent()
+    {
+        Async\wait(function () {
+            $fn = function () {
+                throw new \Exception('Hey!');
+            };
+            $res = yield Async\silent($fn, $e);
+            $this->assertEmpty($res);
+            $this->assertInstanceOf(Exception::class, $e);
+
+            $res = yield Async\silent(Async\timeout(Async\execute('sleep 1'), 0.1), $e);
+            $this->assertEmpty($res);
+            $this->assertInstanceOf(Exception::class, $e);
+        });
+    }
+
+
     public function testTimeout()
     {
         $defer = new Deferred();

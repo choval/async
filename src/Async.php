@@ -755,6 +755,27 @@ final class Async
 
 
 
+    /**
+     * Resolves silently.
+     * Uses resolve.
+     */
+    public static function resolveSilent($gen, &$exception=false, LoopInterface $loop = null)
+    {
+        $defer = new Deferred();
+        static::resolve($gen, $loop)
+            ->done(
+                function ($res) use ($defer) {
+                    $defer->resolve($res);
+                },
+                function ($e) use (&$exception, $defer) {
+                    $exception = $e;
+                    $defer->resolve();
+                }
+            );
+        return $defer->promise();
+    }
+
+
 
     /**
      * Resolves multiple things:

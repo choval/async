@@ -229,14 +229,30 @@ function retry()
 /**
  * Resolves a Generator or Closure
  *
- * @param LoopInterface $loop (optional)
  * @param Generator|Closure $gen
+ * @param LoopInterface $loop (optional)
  *
  * @return Promise
  */
 function resolve($gen, LoopInterface $loop = null)
 {
     return Async::resolve($gen, $loop);
+}
+
+
+
+/**
+ * Calls and saves exceptions instead of throwing them
+ *
+ * @param Generator|Closure $gen
+ * @param Exception $e (ref)
+ * @param LoopInterface $loop (optional)
+ *
+ * @return Promise
+ */
+function silent($gen, &$exception=false, LoopInterface $loop = null)
+{
+    return Async::resolveSilent($gen, $exception, $loop);
 }
 
 

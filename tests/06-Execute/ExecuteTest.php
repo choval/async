@@ -56,7 +56,32 @@ class ExecuteTest extends TestCase
             $e = '';
             $res = yield Async\silent(Async\timeout(Async\execute('sleep 1'), 0.1), $e);
             $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $this->assertInstanceOf(AsyncException::class, $e);
             $this->assertEmpty($zombies);
+        });
+    }
+
+
+    public function testZombieOnProcessExit()
+    {
+        Async\wait(function () {
+            yield Async\silent(Async\execute('ls "this should return exit1"'), $e);
+            $this->assertInstanceOf(AsyncException::class, $e);
+            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $this->assertEmpty($zombies);
+
+            // Now, SPAM IT!
+            $promises = [];
+            $eses = [];
+            for($i=0;$i<100;$i++) {
+                $promises[] = Async\silent(Async\execute('ls "this should return exit1"'), $eses[$i]);
+            }
+            yield Promise\all($promises);
+            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $this->assertEmpty($zombies);
+            foreach ($eses as $e) {
+                $this->assertInstanceOf(AsyncException::class, $e);
+            }
         });
     }
 }

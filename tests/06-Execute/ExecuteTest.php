@@ -73,8 +73,26 @@ class ExecuteTest extends TestCase
             // Now, SPAM IT!
             $promises = [];
             $eses = [];
-            for($i=0;$i<100;$i++) {
+            for ($i=0;$i<100;$i++) {
                 $promises[] = Async\silent(Async\execute('ls "this should return exit1"'), $eses[$i]);
+            }
+            yield Promise\all($promises);
+            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $this->assertEmpty($zombies);
+            foreach ($eses as $e) {
+                $this->assertInstanceOf(AsyncException::class, $e);
+            }
+        });
+    }
+
+
+    public function testExecuteTimerZombies()
+    {
+        Async\wait(function () {
+            $promises = [];
+            $eses = [];
+            for ($i=0;$i<100;$i++) {
+                $promises[] = Async\silent(Async\execute('sleep 1', 0.1), $eses[$i]);
             }
             yield Promise\all($promises);
             $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));

@@ -259,7 +259,6 @@ final class Async
     }
     public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0)
     {
-        // TODO: Check cancelling test
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
         }
@@ -311,12 +310,16 @@ final class Async
                 });
                 $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc, $id, $trace, $pid) {
                     static::removeFork($id);
-                    $proc->stdout->close();
                     if ($timer) {
                         $loop->cancelTimer($timer);
                     }
+                    $proc->stdout->close();
+                    $proc->stdin->close();
+                    foreach ($proc->pipes as $pipe) {
+                        $pipe->close();
+                    }
                     // Clears any hanging processes
-                    pcntl_waitpid($pid, $status, \WNOHANG);
+                    pcntl_waitpid(-$pid, $status, \WNOHANG);
                     if ($err) {
                         $msg = $err->getMessage();
                         $e = new Exception($msg, $termSignal, $trace, $err);
@@ -491,6 +494,7 @@ final class Async
                                 $defer->reject(new Exception('child exited with status: ' . $code, $code, $trace));
                                 @socket_close($sockets[1]);
                                 @socket_close($sockets[0]);
+                                pcntl_waitpid(-$pid, $gstatus, \WNOHANG);
                                 return;
                             }
                             while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
@@ -504,6 +508,7 @@ final class Async
                             }
                             @socket_close($sockets[1]);
                             @socket_close($sockets[0]);
+                            pcntl_waitpid(-$pid, $gstatus, \WNOHANG);
                             return;
                         } elseif ($waitpid < 0) {
                             static::removeFork($id);
@@ -512,8 +517,10 @@ final class Async
                                 $defer->reject(new Exception('child errored with status: ' . $code, $code, $trace));
                                 @socket_close($sockets[1]);
                                 @socket_close($sockets[0]);
+                                pcntl_waitpid(-$pid, $gstatus, \WNOHANG);
                                 return;
                             }
+                            pcntl_waitpid(-$pid, $gstatus, \WNOHANG);
                             return $defer->reject(new Exception('child failed with unknown status', 0, $trace));
                         }
                     });

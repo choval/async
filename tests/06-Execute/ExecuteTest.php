@@ -102,4 +102,17 @@ class ExecuteTest extends TestCase
             }
         });
     }
+
+
+    public function testChildProcessZombies()
+    {
+        Async\wait(function () {
+            $sleepbin = __DIR__.'/../scripts/phpsleep';
+            $sleepbin = realpath($sleepbin);
+            $cmd = 'echo chain && '.$sleepbin.' 2';
+            yield Async\silent(Async\execute($cmd, 0.1));
+            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $this->assertEmpty($zombies);
+        });
+    }
 }

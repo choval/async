@@ -1,0 +1,4 @@
+#!/usr/bin/env php
+<?php
+$howlong = $argv[1] ?? 1;
+sleep($howlong);

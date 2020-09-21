@@ -265,7 +265,9 @@ final class Async
         $proc = null;
         $defer = new Deferred(function () use (&$proc) {
             if ($proc) {
+                $pid = $proc->getPid();
                 $proc->terminate();
+                pcntl_waitpid(-$pid, $status, \WNOHANG);
             }
         });
         $id = random_bytes(16);

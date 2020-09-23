@@ -269,7 +269,7 @@ final class Async
                 $proc->terminate();
                 pcntl_waitpid(-$pid, $status, \WNOHANG);
                 pcntl_waitpid($pid, $status, \WNOHANG);
-                pcntl_waitpid(0, $status, \WNOHANG);
+                // pcntl_waitpid(0, $status, \WNOHANG);
             }
         });
         $id = random_bytes(16);
@@ -325,7 +325,7 @@ final class Async
                     // Clears any hanging processes
                     pcntl_waitpid(-$pid, $status, \WNOHANG);
                     pcntl_waitpid($pid, $status, \WNOHANG);
-                    pcntl_waitpid(0, $status, \WNOHANG);
+                    // pcntl_waitpid(0, $status, \WNOHANG);
                     if ($err) {
                         $msg = $err->getMessage();
                         $e = new Exception($msg, $termSignal, $trace, $err);

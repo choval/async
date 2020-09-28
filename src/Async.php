@@ -263,14 +263,12 @@ final class Async
             $timeout = ini_get('max_execution_time');
         }
         $proc = null;
-        $defer = new Deferred(function () use (&$proc) {
-            if ($proc) {
-                $pid = $proc->getPid();
-                $proc->terminate();
-                pcntl_waitpid(-$pid, $status, \WNOHANG);
-                pcntl_waitpid($pid, $status, \WNOHANG);
-                // pcntl_waitpid(0, $status, \WNOHANG);
-            }
+        $defer = new Deferred(function () use (&$proc, $loop) {
+            $loop->addTimer(0, function () use (&$proc) {
+                if ($proc) {
+                    $proc->terminate();
+                }
+            });
         });
         $id = random_bytes(16);
         $trace = debug_backtrace();
@@ -291,12 +289,12 @@ final class Async
                         $err = new \RuntimeException('Process timed out in ' . $timeout . ' secs');
                     });
                 }
-                $proc->start($loop);
-                $pid = $proc->getPid();
                 $echo = false;
                 if (!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
                     $echo = true;
                 }
+                $proc->start($loop);
+                $pid = $proc->getPid();
                 // Writes buffer to a file if it gets too large
                 $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
                     $buffer .= $chunk;
@@ -323,9 +321,10 @@ final class Async
                         $pipe->close();
                     }
                     // Clears any hanging processes
-                    pcntl_waitpid(-$pid, $status, \WNOHANG);
-                    pcntl_waitpid($pid, $status, \WNOHANG);
-                    // pcntl_waitpid(0, $status, \WNOHANG);
+                    $loop->addTimer(0, function () use ($pid) {
+                        pcntl_waitpid(-$pid, $status);
+                        pcntl_waitpid($pid, $status);
+                    });
                     if ($err) {
                         $msg = $err->getMessage();
                         $e = new Exception($msg, $termSignal, $trace, $err);

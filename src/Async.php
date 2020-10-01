@@ -253,11 +253,11 @@ final class Async
     /**
      * Execute
      */
-    public static function execute(string $cmd, float $timeout = 0)
+    public static function execute(string $cmd, float $timeout = 0, &$streams=null)
     {
-        return static::executeWithLoop(static::getLoop(), $cmd, $timeout);
+        return static::executeWithLoop(static::getLoop(), $cmd, $timeout, $streams);
     }
-    public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0)
+    public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0, &$streams=null)
     {
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
@@ -266,14 +266,18 @@ final class Async
         $defer = new Deferred(function () use (&$proc, $loop) {
             $loop->addTimer(0, function () use (&$proc) {
                 if ($proc) {
-                    $proc->terminate();
+                    $proc->stdin->end();
+                    foreach ($proc->pipes as $pipe) {
+                        $pipe->close();
+                    }
+                    $proc->terminate(\SIGKILL ?? 9);
                 }
             });
         });
         $id = random_bytes(16);
         $trace = debug_backtrace();
         static::waitFreeFork($loop)->done(
-            function () use ($loop, $cmd, $timeout, $defer, $id, $trace, &$proc) {
+            function () use ($loop, $cmd, $timeout, $defer, $id, $trace, &$proc, &$streams) {
                 static::addFork($id, $defer->promise());
                 $buffer = '';
                 $proc = new Process($cmd);
@@ -295,35 +299,41 @@ final class Async
                 }
                 $proc->start($loop);
                 $pid = $proc->getPid();
+                if (!is_null($streams)) {
+                    $streams = $proc->pipes;
+                }
                 // Writes buffer to a file if it gets too large
-                $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
-                    $buffer .= $chunk;
-                    if ($echo) {
-                        $first = "  [ASYNC EXECUTE]  ";
-                        $chunk = trim($chunk);
-                        $lines = explode("\n", $chunk);
-                        foreach ($lines as $line) {
-                            fwrite(STDOUT, $first . $line . "\n");
+                if (is_null($streams)) {
+                    $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo, &$streams) {
+                        $buffer .= $chunk;
+                        if ($echo) {
+                            $first = "  [ASYNC EXECUTE]  ";
+                            $chunk = trim($chunk);
+                            $lines = explode("\n", $chunk);
+                            foreach ($lines as $line) {
+                                fwrite(STDOUT, $first . $line . "\n");
+                            }
                         }
-                    }
-                });
-                $proc->stdout->on('error', function (\Exception $e) use (&$err) {
-                    $err = $e;
-                });
+                    });
+                    $proc->stdout->on('error', function (\Exception $e) use (&$err) {
+                        $err = $e;
+                    });
+                }
                 $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc, $id, $trace, $pid) {
                     static::removeFork($id);
                     if ($timer) {
                         $loop->cancelTimer($timer);
                     }
-                    $proc->stdout->close();
+                    $proc->stdin->end();
                     $proc->stdin->close();
+                    $proc->stdout->close();
                     foreach ($proc->pipes as $pipe) {
                         $pipe->close();
                     }
                     // Clears any hanging processes
                     $loop->addTimer(0, function () use ($pid) {
-                        pcntl_waitpid(-$pid, $status);
-                        pcntl_waitpid($pid, $status);
+                        pcntl_waitpid(-$pid, $status, \WNOHANG);
+                        pcntl_waitpid($pid, $status, \WNOHANG);
                     });
                     if ($err) {
                         $msg = $err->getMessage();

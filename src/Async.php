@@ -332,7 +332,6 @@ final class Async
                     }
                     // Clears any hanging processes
                     $loop->addTimer(0, function () use ($pid) {
-                        pcntl_waitpid(-$pid, $status, \WNOHANG);
                         pcntl_waitpid($pid, $status, \WNOHANG);
                     });
                     if ($err) {
@@ -504,15 +503,7 @@ final class Async
                         if ($waitpid > 0) {
                             static::removeFork($id);
                             $loop->cancelTimer($timer);
-                            if (!pcntl_wifexited($status)) {
-                                $code = pcntl_wexitstatus($status);
-                                $defer->reject(new Exception('child exited with status: ' . $code, $code, $trace));
-                                @socket_close($sockets[1]);
-                                @socket_close($sockets[0]);
-                                pcntl_waitpid(-$pid, $gstatus, \WNOHANG);
-                                return;
-                            }
-                            while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
+                            while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) !== false) {
                                 $buffer .= $chunk;
                             }
                             $data = unserialize($buffer);
@@ -523,7 +514,6 @@ final class Async
                             }
                             @socket_close($sockets[1]);
                             @socket_close($sockets[0]);
-                            pcntl_waitpid(-$pid, $gstatus, \WNOHANG);
                             return;
                         } elseif ($waitpid < 0) {
                             static::removeFork($id);
@@ -532,15 +522,22 @@ final class Async
                                 $defer->reject(new Exception('child errored with status: ' . $code, $code, $trace));
                                 @socket_close($sockets[1]);
                                 @socket_close($sockets[0]);
-                                pcntl_waitpid(-$pid, $gstatus, \WNOHANG);
                                 return;
                             }
-                            pcntl_waitpid(-$pid, $gstatus, \WNOHANG);
                             return $defer->reject(new Exception('child failed with unknown status', 0, $trace));
                         }
                     });
                 } else {
                     // Child
+                    register_shutdown_function(function () {
+                        // SIGKILL doesn't close the resources
+                        $sig = \SIGKILL ?? 9;
+                        posix_kill(getmypid(), $sig);
+                    });
+                    $sid = posix_setsid();
+                    if ($sid < 0) {
+                        exit(1);
+                    }
                     try {
                         $res = call_user_func_array($func, $args);
                         $res = serialize($res);

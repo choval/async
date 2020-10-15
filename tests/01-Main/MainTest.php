@@ -338,6 +338,18 @@ class MainTest extends TestCase
     }
 
 
+
+    public function testTimeout()
+    {
+        $defer = new Deferred();
+        $promise = $defer->promise();
+        $this->expectException(AsyncException::class);
+        $this->expectExceptionMessage('Timed out after 0.5 secs');
+        $res = Async\wait(Async\timeout($promise, 0.5), 1);
+    }
+
+
+
     public function testAsyncResolveSilent()
     {
         Async\wait(function () {
@@ -355,13 +367,22 @@ class MainTest extends TestCase
     }
 
 
-    public function testTimeout()
+    public function testAsyncSilentCancel()
     {
-        $defer = new Deferred();
-        $promise = $defer->promise();
-        $this->expectException(AsyncException::class);
-        $this->expectExceptionMessage('Timed out after 0.5 secs');
-        $res = Async\wait(Async\timeout($promise, 0.5), 1);
+        Async\wait(function () {
+            $a = false;
+            $fn = function () use (&$a) {
+                yield Async\sleep(1);
+                $a = true;
+                return $a;
+            };
+            $res = yield Async\silent($fn);
+            $this->assertTrue($a);
+            $a = false;
+            $res = yield Async\silent(Async\timeout(Async\silent($fn),0.1), $e);
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertFalse($a);
+        });
     }
 
 

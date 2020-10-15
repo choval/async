@@ -780,9 +780,13 @@ final class Async
      */
     public static function resolveSilent($gen, &$exception=false, LoopInterface $loop = null)
     {
-        $defer = new Deferred();
-        static::resolve($gen, $loop)
-            ->done(
+        $prom = static::resolve($gen, $loop);
+        $defer = new Deferred(function ($resolve, $reject) use ($prom, &$exception) {
+            $prom->cancel();
+            $exception = new CancelException();
+            $resolve();
+        });
+        $prom->done(
                 function ($res) use ($defer) {
                     $defer->resolve($res);
                 },

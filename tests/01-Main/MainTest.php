@@ -379,7 +379,7 @@ class MainTest extends TestCase
             $res = yield Async\silent($fn);
             $this->assertTrue($a);
             $a = false;
-            $res = yield Async\silent(Async\timeout(Async\silent($fn),0.1), $e);
+            $res = yield Async\silent(Async\timeout(Async\silent($fn), 0.1), $e);
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertFalse($a);
         });

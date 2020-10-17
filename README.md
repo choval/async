@@ -249,6 +249,11 @@ $end = time();
 // $end == $start+2;
 ```
 
+A second float parameter is a timeout in seconds, defaults to no timeout.
+
+A third float parameter is the interval at which to check, defaults to 0.01 secs.
+A low interval will consume much more CPU.
+
 ### async
 
 Have a piece of blocking code that you need to run in async?

@@ -196,27 +196,46 @@ final class Async
      * We run Block\await with a catch multiple times, to avoid having
      * it block timers and promises added to the loop after calling sync.
      */
-    public static function sync($promise, float $timeout = null)
+    public static function sync($promise, float $timeout = null, float $interval = 0.01)
     {
-        return static::syncWithLoop(static::getLoop(), $promise, $timeout);
+        return static::syncWithLoop(static::getLoop(), $promise, $timeout, $interval);
     }
-    public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null)
+    public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null, float $interval = 0.01)
     {
+        if ($interval < 0) {
+            throw new Exception('Interval must be 0 or positive float');
+        }
         $res = null;
         $err = null;
         $promise = static::resolve($promise, $loop);
         if (!is_null($timeout)) {
             $promise = static::timeoutWithLoop($loop, $promise, $timeout);
         }
+        $done = false;
         $final = $promise->then(
-            function ($r) use (&$res) {
+            function ($r) use (&$res, &$done) {
                 $res = $r;
+                $done = true;
             },
-            function ($e) use (&$err) {
+            function ($e) use (&$err, &$done) {
                 $err = $e;
+                $done = true;
             }
         );
-        while (!static::isDoneWithLoop($loop, $final));
+        $periodic = $loop->addPeriodicTimer($interval, function () use ($loop) {
+            $loop->stop();
+        });
+        while (!$done) {
+            try {
+                $loop->run();
+            } catch (\RuntimeException $e) {
+                if ($e->getMessage() != 'Can\'t shift from an empty datastructure') {
+                    $loop->cancelTimer($periodic);
+                    throw $e;
+                }
+            }
+        }
+        $loop->cancelTimer($periodic);
         if ($err) {
             throw $err;
         }
@@ -787,14 +806,14 @@ final class Async
             $resolve();
         });
         $prom->done(
-                function ($res) use ($defer) {
+            function ($res) use ($defer) {
                     $defer->resolve($res);
                 },
-                function ($e) use (&$exception, $defer) {
+            function ($e) use (&$exception, $defer) {
                     $exception = $e;
                     $defer->resolve();
                 }
-            );
+        );
         return $defer->promise();
     }
 

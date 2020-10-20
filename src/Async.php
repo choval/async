@@ -289,7 +289,7 @@ final class Async
                     foreach ($proc->pipes as $pipe) {
                         $pipe->close();
                     }
-                    $proc->terminate(\SIGKILL ?? 9);
+                    $proc->terminate(9);    // SIGKILL
                 }
             });
         });
@@ -308,7 +308,7 @@ final class Async
                         foreach ($proc->pipes as $pipe) {
                             $pipe->close();
                         }
-                        $proc->terminate(\SIGKILL ?? 9);
+                        $proc->terminate(9);    // SIGKILL
                         $err = new \RuntimeException('Process timed out in ' . $timeout . ' secs');
                     });
                 }
@@ -549,8 +549,7 @@ final class Async
                 } else {
                     // Child
                     register_shutdown_function(function () {
-                        // SIGKILL doesn't close the resources
-                        $sig = \SIGKILL ?? 9;
+                        $sig = 9;   // SIGKILL doesn't close the resources
                         posix_kill(getmypid(), $sig);
                     });
                     $sid = posix_setsid();
@@ -807,12 +806,12 @@ final class Async
         });
         $prom->done(
             function ($res) use ($defer) {
-                    $defer->resolve($res);
-                },
+                $defer->resolve($res);
+            },
             function ($e) use (&$exception, $defer) {
-                    $exception = $e;
-                    $defer->resolve();
-                }
+                $exception = $e;
+                $defer->resolve();
+            }
         );
         return $defer->promise();
     }

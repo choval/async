@@ -290,6 +290,9 @@ final class Async
                         $pipe->close();
                     }
                     $proc->terminate(9);    // SIGKILL
+                    $pid = $proc->getPid();
+                    posix_kill($pid, 9);
+                    pcntl_waitpid($pid, $status, \WNOHANG);
                 }
             });
         });
@@ -309,6 +312,9 @@ final class Async
                             $pipe->close();
                         }
                         $proc->terminate(9);    // SIGKILL
+                        $pid = $proc->getPid();
+                        posix_kill($pid, 9);
+                        pcntl_waitpid($pid, $status, \WNOHANG);
                         $err = new \RuntimeException('Process timed out in ' . $timeout . ' secs');
                     });
                 }
@@ -350,12 +356,16 @@ final class Async
                         $pipe->close();
                     }
                     // Clears any hanging processes
-                    $loop->addTimer(0, function () use ($pid) {
+                    if (empty($pid)) {
+                        $pid = $proc->getPid();
+                    }
+                    $loop->addTimer(0.001, function () use ($pid) {
                         pcntl_waitpid($pid, $status, \WNOHANG);
                     });
                     if ($err) {
+                        $code = $termSignal ?? $exitCode ?? $err->getCode();
                         $msg = $err->getMessage();
-                        $e = new Exception($msg, $termSignal, $trace, $err);
+                        $e = new Exception($msg, $code, $trace, $err);
                         return $defer->reject($e);
                     }
                     if (!is_null($termSignal)) {
@@ -522,9 +532,11 @@ final class Async
                         if ($waitpid > 0) {
                             static::removeFork($id);
                             $loop->cancelTimer($timer);
+                            /*
                             while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) !== false) {
                                 $buffer .= $chunk;
                             }
+                             */
                             $data = unserialize($buffer);
                             if (is_a($data, \Exception::class)) {
                                 $defer->reject($data);
@@ -536,6 +548,7 @@ final class Async
                             return;
                         } elseif ($waitpid < 0) {
                             static::removeFork($id);
+                            $loop->cancelTimer($timer);
                             if (!pcntl_wifexited($status)) {
                                 $code = pcntl_wexitstatus($status);
                                 $defer->reject(new Exception('child errored with status: ' . $code, $code, $trace));

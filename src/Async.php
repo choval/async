@@ -13,6 +13,7 @@ use React\Promise\Deferred;
 use React\Promise\FulfilledPromise;
 use React\Promise\PromiseInterface;
 use React\Promise\RejectedPromise;
+use React\Promise\Stream;
 use React\Stream\ReadableStreamInterface;
 
 final class Async
@@ -749,63 +750,6 @@ final class Async
 
 
     /**
-     *
-     * Unwraps a stream
-     * This is based on promise-stream, but allows handling non-strings
-     * https://github.com/reactphp/promise-stream/blob/master/src/functions.php
-     *
-     */
-    public static function buffer(ReadableStreamInterface $stream, $maxLength = null)
-    {
-        // Return null if stream is closed
-        if (!$stream->isReadable()) {
-            return Promise\resolve(null);
-        }
-        $buffer = [];
-        $bufferer;
-        $size = 0;
-        $type = 'array';
-        $trace = debug_backtrace();
-        $promise = new Promise\Promise(function ($resolve, $reject) use ($stream, $maxLength, &$buffer, &$bufferer, &$size, &$type) {
-            $bufferer = function ($data) use (&$buffer, $reject, $maxLength, &$size, &$type) {
-                $buffer[] = $data;
-                if (is_string($data)) {
-                    $type = 'string';
-                    $size += strlen($data);
-                } else {
-                    $size++;
-                }
-                if ($maxLength !== null && $size > $maxLength) {
-                    $reject(new \OverflowException('Buffer exceeded maximum length'));
-                }
-            };
-            $stream->on('data', $bufferer);
-            $stream->on('error', function ($error) use ($reject) {
-                $reject($error);
-            });
-
-            $stream->on('close', function () use ($resolve, &$buffer, &$type) {
-                if ($type == 'string') {
-                    return $resolve(implode('', $buffer));
-                }
-                $resolve($buffer);
-            });
-        }, function ($resolve, $reject) use ($trace) {
-            $reject(new Exception('Cancelled buffering', 0, $trace));
-        });
-
-        $promise->done(null, function ($error) use (&$buffer, &$bufferer, $stream, $type) {
-            // promise rejected => clear buffer and buffering
-            $buffer = [];
-            $stream->removeListener('data', $bufferer);
-            throw $error;
-        });
-        return $promise;
-    }
-
-
-
-    /**
      * Resolves silently.
      * Uses resolve.
      */
@@ -862,7 +806,7 @@ final class Async
             }
         }
         if (is_a($gen, ReadableStreamInterface::class)) {
-            $prom = static::buffer($gen);
+            $prom = Stream\buffer($gen);
         } elseif (is_a($gen, PromiseInterface::class)) {
             $prom = $gen;
         } else {

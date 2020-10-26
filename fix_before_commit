@@ -1,3 +1,0 @@
-#!/bin/bash
-php-cs-fixer fix -v src && \
-php-cs-fixer fix -v tests

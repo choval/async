@@ -16,6 +16,8 @@ use React\Promise;
 use React\Promise\Deferred;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
+use React\Stream\ReadableStreamInterface;
+
 
 /**
  * Creates and sets the event-loop
@@ -40,7 +42,11 @@ function init()
  */
 function load_memory_limit($limit=null)
 {
-    return Async::loadMemoryLimit($limit);
+    return Async::loadMemLimit($limit);
+}
+function load_mem_limi($limit=null)
+{
+    return Async::loadMemLimit($limit);
 }
 
 
@@ -267,7 +273,7 @@ function silent($gen, &$exception=false, LoopInterface $loop = null)
  */
 function buffer(ReadableStreamInterface $stream, $maxLength = null)
 {
-    return Async::buffer($stream, $maxLength);
+    return Stream\buffer($stream, $maxLength);
 }
 
 

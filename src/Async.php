@@ -305,7 +305,6 @@ final class Async
                 $buffer = '';
                 $proc = new Process($cmd);
                 $timer = false;
-                $err;
                 if ($timeout > 0) {
                     $timer = $loop->addTimer($timeout, function () use ($proc, &$err, $timeout) {
                         $proc->stdin->end();
@@ -430,7 +429,7 @@ final class Async
      */
     public static function retry($func, int $retries = 10, float $frequency = 0.001, $ignore_errors = null)
     {
-        return static::retryWithLoop(static::getLoop(), $func, $retries, $frequency, $type);
+        return static::retryWithLoop(static::getLoop(), $func, $retries, $frequency, $ignore_errors);
     }
     public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.001, $ignore_errors = null)
     {
@@ -609,7 +608,6 @@ final class Async
             }
             $generator->throw(new CancelException());
         });
-        $func;
         $func = function () use ($generator, $defer, &$promise, $loop, &$func, $depth) {
             try {
                 while (is_a($promise, Closure::class)) {
@@ -1033,7 +1031,6 @@ final class Async
             if ($timer) {
                 $loop->cancelTimer($timer);
             }
-            $promise->cancel();
             $reject(new CancelException());
         });
         $timer = $loop->addPeriodicTimer($freq, function ($timer) use ($defer, $bytes, $loop) {

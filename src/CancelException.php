@@ -2,6 +2,7 @@
 
 namespace Choval\Async;
 
+use Throwable;
 use Choval\Async\Exception;
 
 class CancelException extends Exception

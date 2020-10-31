@@ -1,6 +1,6 @@
 <?php
 
-namespace Choval\Async;
+namespace Choval\Async {
 
 /**
  *
@@ -17,7 +17,6 @@ use React\Promise\Deferred;
 use React\Promise\RejectedPromise;
 use React\Promise\Stream;
 use React\Stream\ReadableStreamInterface;
-
 
 /**
  * Creates and sets the event-loop
@@ -473,4 +472,7 @@ function wait_memory()
         array_unshift($args, $loop);
     }
     return call_user_func_array([Async::class, 'waitMemoryWithLoop'], $args);
+}
+
+
 }

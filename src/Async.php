@@ -181,13 +181,13 @@ final class Async
     /**
      * Wait
      */
-    public static function wait($promise, float $timeout = null)
+    public static function wait($promise, float $timeout = null, float $interval = 0.01)
     {
-        return static::waitWithLoop(static::getLoop(), $promise, $timeout);
+        return static::waitWithLoop(static::getLoop(), $promise, $timeout, $interval);
     }
-    public static function waitWithLoop(LoopInterface $loop, $promise, float $timeout = null)
+    public static function waitWithLoop(LoopInterface $loop, $promise, float $timeout = null, float $interval = 0.01)
     {
-        return static::syncWithLoop($loop, $promise, $timeout);
+        return static::syncWithLoop($loop, $promise, $timeout, $interval);
     }
 
 

@@ -475,4 +475,13 @@ function wait_memory()
 }
 
 
+/**
+ * Measures the time it takes for a promise
+ * to finish (resolve or reject)
+ */
+function timer($func, &$time, LoopInterface $loop = null)
+{
+    return Async::timer($func, $time, $loop);
+}
+
 }

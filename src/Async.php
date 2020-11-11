@@ -1044,4 +1044,21 @@ final class Async
         });
         return $defer->promise();
     }
+
+
+    /**
+     * Measures the time of a promise
+     */
+    public static function timer($func, &$time, LoopInterface $loop= null)
+    {
+        if (is_null($loop)) {
+            $loop = static::$loop;
+        }
+        $start = microtime(true);
+        $prom = static::resolve($func, $loop);
+        $prom->always(function () use ($start, &$time) {
+            $time = microtime(true) - $start;
+        });
+        return $prom;
+    }
 }

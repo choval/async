@@ -386,6 +386,19 @@ class MainTest extends TestCase
     }
 
 
+    public function testAsyncTimer()
+    {
+        Async\wait(function () {
+            $delay = 0.1;
+            yield Async\timer(Async\sleep($delay), $time);
+            $pct = round($time / $delay * 100);
+            $abs = abs(100 - $pct);
+            // Allows 5% diff on the delay
+            $this->assertLessThan(5, $abs);
+        });
+    }
+
+
     public static function tearDownAfterClass(): void
     {
         static::$loop->stop();

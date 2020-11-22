@@ -273,11 +273,11 @@ final class Async
     /**
      * Execute
      */
-    public static function execute(string $cmd, float $timeout = 0, &$streams=null)
+    public static function execute(string $cmd, float $timeout = 0, callable $outputfn=null)
     {
-        return static::executeWithLoop(static::getLoop(), $cmd, $timeout, $streams);
+        return static::executeWithLoop(static::getLoop(), $cmd, $timeout, $outputfn);
     }
-    public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0, &$streams=null)
+    public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0, callable $outputfn=null)
     {
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
@@ -300,7 +300,7 @@ final class Async
         $id = random_bytes(16);
         $trace = debug_backtrace();
         static::waitFreeFork($loop)->done(
-            function () use ($loop, $cmd, $timeout, $defer, $id, $trace, &$proc, &$streams) {
+            function () use ($loop, $cmd, $timeout, $defer, $id, $trace, &$proc, $outputfn) {
                 static::addFork($id, $defer->promise());
                 $buffer = '';
                 $proc = new Process($cmd);
@@ -324,12 +324,11 @@ final class Async
                 }
                 $proc->start($loop);
                 $pid = $proc->getPid();
-                if (!is_null($streams)) {
-                    $streams = $proc->pipes;
-                }
-                // Writes buffer to a file if it gets too large
-                if (is_null($streams)) {
-                    $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo, &$streams) {
+                // TODO: Writes buffer to a file if it gets too large
+                if ($outputfn) {
+                    $proc->stdout->on('data', $outputfn);
+                } else {
+                    $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
                         $buffer .= $chunk;
                         if ($echo) {
                             $first = "  [ASYNC EXECUTE]  ";
@@ -340,10 +339,10 @@ final class Async
                             }
                         }
                     });
-                    $proc->stdout->on('error', function (\Exception $e) use (&$err) {
-                        $err = $e;
-                    });
                 }
+                $proc->stdout->on('error', function (\Exception $e) use (&$err) {
+                    $err = $e;
+                });
                 $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc, $id, $trace, $pid) {
                     static::removeFork($id);
                     if ($timer) {

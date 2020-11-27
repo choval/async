@@ -238,6 +238,9 @@ final class Async
         }
         $loop->cancelTimer($periodic);
         if ($err) {
+            if (!is_a($err, \Throwable::class)) {
+                throw new \RuntimeException( $err->getMessage() );
+            }
             throw $err;
         }
         return $res;

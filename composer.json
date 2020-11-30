@@ -19,6 +19,7 @@
     },
     "require": {
         "php": "^7.2",
+        "ext-pcntl": "*",
         "react/promise-stream": "^1.2",
         "react/child-process": "^0.6",
         "react/promise": "^2.7",

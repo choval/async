@@ -7,15 +7,16 @@ A library to ease handling promises in [ReactPHP](https://reactphp.org).
 * [Usage](#usage)
 * [License](#license)
 * Functions
+  * [async](#async) Run blocking code in async mode
+  * [execute](#execute) Execute a command
   * [is\_done](#is_done) Instantly return if the Promise is resolved or rejected
   * [resolve](#resolve) Use yield with promises!
-  * [silent](#silent) Silently resolve
-  * [execute](#execute) Execute a command
-  * [sleep](#sleep) Non-blocking sleep
-  * [wait](#wait) Make async code synchronous
-  * [async](#async) Run blocking code in async mode
   * [retry](#retry) Retry a function multiple times
+  * [silent](#silent) Silently resolve
+  * [sleep](#sleep) Non-blocking sleep
   * [timeout](#timeout) Adds a timeout to a Promise
+  * [timer](#timer) Allows to time a Promise
+  * [wait](#wait) Make async code synchronous
   * [wait\_memory](#wait_memory) Waits for a number of RAM bytes to be available
   * [PHP file functions](#file_functions) PHP's blocking file functions in async mode
 
@@ -339,6 +340,18 @@ Async\wait(Async\timeout($func, 1.5));
 // Throws an Exception due to the timeout 1.5 < 2
 ```
 
+### timer
+
+Saves the number of elapsed microseconds (float).
+
+```php
+Async\wait(function() {
+    Async\timer(function () {
+        Async\sleep(0.1);
+    }, $msecs);
+    print_r($msecs); // ~100ms
+});
+```
 
 ### wait\_memory
 

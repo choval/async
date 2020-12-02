@@ -319,20 +319,19 @@ class MainTest extends TestCase
 
     public function testAsyncResolveMemoryUsage()
     {
-        $times = 1;
+        $times = 4;
         $memories = [];
         while ($times--) {
             Async\wait(function () use (&$memories) {
-                $limit = 100000;
+                $limit = 10000;
                 $i = 0;
-                $prev = memory_get_usage();
+                $prev = memory_get_usage(true);
                 while ($limit--) {
                     yield Async\sleep(0.0000001);
                     $i++;
                 }
-                $mem = memory_get_usage();
-                $diff = $mem - $prev;
-                $this->assertLessThanOrEqual(16384*$i, $diff);
+                $mem = memory_get_usage(true);
+                $this->assertLessThanOrEqual($prev, $mem);
             });
         }
     }

@@ -345,7 +345,7 @@ Async\wait(Async\timeout($func, 1.5));
 Saves the number of elapsed microseconds (float).
 
 ```php
-Async\wait(function() {
+Async\wait(function () {
     Async\timer(function () {
         Async\sleep(0.1);
     }, $msecs);

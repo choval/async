@@ -29,7 +29,7 @@ composer require choval/async
 
 ## Notes
 
-Tested on PHP 7.2 and PHP 7.3. Currently used in production systems. Untested on PHP 7.4.
+Currently used in production systems with PHP 7.4.
 
 ## Usage
 

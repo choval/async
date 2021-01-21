@@ -116,7 +116,7 @@ final class Async
      * Add a fork
      *
      */
-    public static function addFork(string $id, PromiseInterface $promise)
+    public static function addFork(string $id, Promise\Promise $promise)
     {
         static::$forks[$id] = $promise;
         $promise->always(function () use ($id) {
@@ -150,7 +150,7 @@ final class Async
      */
     public static function waitFreeFork(LoopInterface $loop)
     {
-        return static::resolve(function () use ($loop) {
+        return static::resolve(function () {
             $limit = static::getForksLimit();
             $count = count(static::$forks);
             if ($count < $limit) {
@@ -346,7 +346,7 @@ final class Async
                 $proc->stdout->on('error', function (\Exception $e) use (&$err) {
                     $err = $e;
                 });
-                $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $cmd, $timer, $loop, &$err, $proc, $id, $trace, $pid) {
+                $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $timer, $loop, &$err, $proc, $id, $trace, $pid) {
                     static::removeFork($id);
                     if ($timer) {
                         $loop->cancelTimer($timer);
@@ -476,7 +476,7 @@ final class Async
         $retries--;
         $promise = static::resolve($func, $loop);
         $promise->done($goodcb, $badcb);
-        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($func, &$retries, $ignore_errors, &$error, $defer, &$promise, &$trace, $goodcb, $badcb, $loop) {
+        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($func, &$retries, &$error, $defer, &$promise, &$trace, $goodcb, $badcb, $loop) {
             if (is_null($promise)) {
                 if ($retries < 0) {
                     if (empty($error)) {
@@ -490,7 +490,9 @@ final class Async
             }
         });
         $defer_promise = $defer->promise();
-        $defer_promise->always(function () use ($timer, $loop) {
+        $defer_promise->then(function() use ($timer, $loop) {
+            $loop->cancelTimer($timer);
+        }, function() use ($timer, $loop) {
             $loop->cancelTimer($timer);
         });
         return $defer_promise;
@@ -605,7 +607,7 @@ final class Async
     {
         $promise = $generator->current();
         $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
-            if (is_a($promise, PromiseInterface::class)) {
+            if (is_a($promise, Promise\Promise::class)) {
                 $promise->cancel();
             }
             $generator->throw(new CancelException());
@@ -697,7 +699,7 @@ final class Async
             return $generator->getReturn();
         }
         $defer = new Deferred(function ($resolve, $reject) use ($generator, $promise) {
-            if (is_a($promise, PromiseInterface::class)) {
+            if (is_a($promise, Promise\Promise::class)) {
                 $promise->cancel();
             }
             // $reject(new CancelException());
@@ -705,7 +707,7 @@ final class Async
         });
         $promise
             ->then(
-                function ($res) use ($generator, $defer, $depth) {
+                function ($res) use ($generator, $depth) {
                     try {
                         $generator->send($res);
                     } catch (\Throwable $e) {
@@ -720,7 +722,7 @@ final class Async
                     }
                     return $generator->getReturn();
                 },
-                function ($e) use ($generator, $defer, $depth) {
+                function ($e) use ($generator, $depth) {
                     try {
                         $generator->throw($e);
                     } catch (\Throwable $e2) {
@@ -736,7 +738,7 @@ final class Async
                     return $generator->getReturn();
                 }
             )
-            ->done(
+            ->then(
                 function ($res) use ($defer) {
                     return $defer->resolve($res);
                 },
@@ -815,13 +817,13 @@ final class Async
         $canceled = false;
         $defer = new Deferred(function ($resolve, $reject) use ($prom, &$canceled) {
             $canceled = true;
-            if (is_a($prom, PromiseInterface::class)) {
+            if (is_a($prom, Promise\Promise::class)) {
                 $prom->cancel();
             }
             $reject(new CancelException());
         });
         $prom
-            ->done(
+            ->then(
                 function ($res) use ($defer) {
                     $defer->resolve($res);
                 },
@@ -987,7 +989,7 @@ final class Async
                 unset(static::$dones_promises[$key]);
             };
             static::$dones_promises[$key] = $promise;
-            $promise->done($good, $bad);
+            $promise->then($good, $bad);
         }
         $loop->addTimer(0, function () use ($loop) {
             $loop->stop();

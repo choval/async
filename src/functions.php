@@ -3,18 +3,16 @@
 namespace Choval\Async {
 
 /**
- *
  * By default all functions are async and return a promise,
  * unless the method name has Sync in it
- *
  */
 
 use Choval\Async\Async;
+use Closure;
+use Generator;
 use React\EventLoop\Factory;
 use React\EventLoop\LoopInterface;
-use React\Promise;
-use React\Promise\Deferred;
-use React\Promise\RejectedPromise;
+use React\Promise\Promise;
 use React\Promise\Stream;
 use React\Stream\ReadableStreamInterface;
 
@@ -36,14 +34,23 @@ function init()
  * Loads a memory limit
  * This is called automatically on set_loop/init
  *
- * @param string limit
- * @return int bytes
+ * @param string $limit = null
+ * @return int
  */
-function load_memory_limit($limit=null)
+function load_memory_limit($limit = null)
 {
     return Async::loadMemLimit($limit);
 }
-function load_mem_limi($limit=null)
+
+
+
+/**
+ * Alias of load_memory_limit
+ *
+ * @param string $limit = null
+ * @return int
+ */
+function load_mem_limit($limit = null)
 {
     return Async::loadMemLimit($limit);
 }
@@ -54,6 +61,8 @@ function load_mem_limi($limit=null)
  * Sets the loop
  *
  * @param LoopInterface $loop
+ *
+ * @return void
  */
 function set_loop(LoopInterface $loop)
 {
@@ -78,6 +87,8 @@ function get_loop()
  * Sets the forking limit for async
  *
  * @param int $limit
+ *
+ * @return void
  */
 function set_forks_limit(int $limit)
 {
@@ -101,9 +112,9 @@ function get_forks_limit()
 /**
  * Wait for a promise (makes code synchronous) or stream (buffers)
  *
- * @param LoopInterface $loop (optional)
  * @param string $cmd
- * @param float $timeout=NULL
+ * @param float $timeout = ?
+ * @param LoopInterface $loop = ?
  *
  * @return mixed
  */
@@ -123,9 +134,9 @@ function wait()
 /**
  * Alias of wait
  *
- * @param LoopInterface $loop (optional)
  * @param string $cmd
- * @param float $timeout=NULL
+ * @param float $timeout = ?
+ * @param LoopInterface $loop = ?
  *
  * @return mixed
  */
@@ -145,8 +156,8 @@ function sync()
 /**
  * Non blocking sleep, that allows Loop to keep ticking in the back
  *
- * @param LoopInterface $loop (optional)
  * @param float $time
+ * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -166,9 +177,9 @@ function sleep()
 /**
  * Executes a command, returns the buffered response
  *
- * @param LoopInterface $loop (optional)
  * @param string $cmd
- * @param float $timeout=-1 (optional)
+ * @param float $timeout = -1
+ * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -188,9 +199,9 @@ function execute()
 /**
  * Runs blocking code asynchronously.
  *
- * @param LoopInterface $loop (optional)
  * @param callable $func
- * @param array $args=[] (optional)
+ * @param array $args = []
+ * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -210,11 +221,11 @@ function async()
 /**
  * Retries a function for X times and eventually returns the exception.
  *
- * @param LoopInterface $loop (optional)
  * @param callable $func
- * @param int $retries=10 (optional)
- * @param float $frequency=0.1 (optional)
- * @param string $type (optional) The Throwable class to catch or string to match
+ * @param int $retries = 10
+ * @param float $frequency = 0.1
+ * @param mixed $ignoreErrors = []
+ * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -235,7 +246,7 @@ function retry()
  * Resolves a Generator or Closure
  *
  * @param Generator|Closure $gen
- * @param LoopInterface $loop (optional)
+ * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -249,9 +260,9 @@ function resolve($gen, LoopInterface $loop = null)
 /**
  * Calls and saves exceptions instead of throwing them
  *
- * @param Generator|Closure $gen
- * @param Exception $e (ref)
- * @param LoopInterface $loop (optional)
+ * @param Generator|Closure|Promise $gen
+ * @param Exception $e
+ * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -266,7 +277,7 @@ function silent($gen, &$exception=false, LoopInterface $loop = null)
  * Buffers a stream and returns a promise
  *
  * @param ReadableStreamInterface $stream
- * @param int $maxLength=null
+ * @param int $maxLength = ?
  *
  * @return Promise
  */
@@ -277,9 +288,13 @@ function buffer(ReadableStreamInterface $stream, $maxLength = null)
 
 
 /**
- *
  * Timeout
  *
+ * @param Generator|Closure|Promise $func
+ * @param float $timeout
+ * @param LoopInterface $loop = ?
+ *
+ * @return Promise
  */
 function timeout()
 {
@@ -295,6 +310,14 @@ function timeout()
 
 /**
  * File get contents
+ *
+ * @param string $filename
+ * @param bool $use_include_path = false
+ * @param resource $context = ?
+ * @param int $offset = 0
+ * @param int $maxlen = ?
+ *
+ * @return string|false
  */
 function file_get_contents()
 {
@@ -429,6 +452,8 @@ function glob()
 
 /**
  * Recursive glob
+ *
+ * @return array
  */
 function rglob()
 {
@@ -444,8 +469,11 @@ function rglob()
 
 /**
  * Checks if a promise is done
- * true: Resolved or Rejected
- * false: pending
+ *
+ * @param Promise $promise
+ * @param mixed $result
+ *
+ * @return bool
  */
 function is_done()
 {
@@ -461,7 +489,9 @@ function is_done()
 
 /**
  * Waits for an amount of bytes
- * before resolving.
+ * before resolving with the diff.
+ *
+ * @return int
  */
 function wait_memory()
 {
@@ -478,6 +508,11 @@ function wait_memory()
 /**
  * Measures the time it takes for a promise
  * to finish (resolve or reject)
+ *
+ * @param Closure|Generator|Promise $func
+ * @param float $time
+ *
+ * @return mixed
  */
 function timer($func, &$time, LoopInterface $loop = null)
 {

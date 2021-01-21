@@ -75,7 +75,10 @@ class AsyncTest extends TestCase
             $promises[] = Async\async($func, [$i]);
         }
         $start = microtime(true);
-        $res = Async\wait($promises);
+        $res = Async\wait(Promise\all($promises));
+        foreach ($res as $k=>$v) {
+            $this->assertEquals($k, $v);
+        }
         $end = microtime(true);
         $diff = $end - $start;
         $this->assertLessThanOrEqual(($limit / $factor), $diff);

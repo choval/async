@@ -490,9 +490,9 @@ final class Async
             }
         });
         $defer_promise = $defer->promise();
-        $defer_promise->then(function() use ($timer, $loop) {
+        $defer_promise->then(function () use ($timer, $loop) {
             $loop->cancelTimer($timer);
-        }, function() use ($timer, $loop) {
+        }, function () use ($timer, $loop) {
             $loop->cancelTimer($timer);
         });
         return $defer_promise;

@@ -112,9 +112,9 @@ function get_forks_limit()
 /**
  * Wait for a promise (makes code synchronous) or stream (buffers)
  *
+ * @param LoopInterface $loop = ?
  * @param string $cmd
  * @param float $timeout = ?
- * @param LoopInterface $loop = ?
  *
  * @return mixed
  */
@@ -134,9 +134,9 @@ function wait()
 /**
  * Alias of wait
  *
+ * @param LoopInterface $loop = ?
  * @param string $cmd
  * @param float $timeout = ?
- * @param LoopInterface $loop = ?
  *
  * @return mixed
  */
@@ -156,8 +156,8 @@ function sync()
 /**
  * Non blocking sleep, that allows Loop to keep ticking in the back
  *
- * @param float $time
  * @param LoopInterface $loop = ?
+ * @param float $time
  *
  * @return Promise
  */
@@ -177,9 +177,9 @@ function sleep()
 /**
  * Executes a command, returns the buffered response
  *
+ * @param LoopInterface $loop = ?
  * @param string $cmd
  * @param float $timeout = -1
- * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -199,9 +199,9 @@ function execute()
 /**
  * Runs blocking code asynchronously.
  *
+ * @param LoopInterface $loop = ?
  * @param callable $func
  * @param array $args = []
- * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -221,11 +221,11 @@ function async()
 /**
  * Retries a function for X times and eventually returns the exception.
  *
+ * @param LoopInterface $loop = ?
  * @param callable $func
  * @param int $retries = 10
  * @param float $frequency = 0.1
  * @param mixed $ignoreErrors = []
- * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -245,8 +245,8 @@ function retry()
 /**
  * Resolves a Generator or Closure
  *
- * @param Generator|Closure $gen
  * @param LoopInterface $loop = ?
+ * @param Generator|Closure $gen
  *
  * @return Promise
  */
@@ -260,9 +260,9 @@ function resolve($gen, LoopInterface $loop = null)
 /**
  * Calls and saves exceptions instead of throwing them
  *
+ * @param LoopInterface $loop = ?
  * @param Generator|Closure|Promise $gen
  * @param Exception $e
- * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -290,9 +290,9 @@ function buffer(ReadableStreamInterface $stream, $maxLength = null)
 /**
  * Timeout
  *
+ * @param LoopInterface $loop = ?
  * @param Generator|Closure|Promise $func
  * @param float $timeout
- * @param LoopInterface $loop = ?
  *
  * @return Promise
  */
@@ -514,9 +514,46 @@ function wait_memory()
  *
  * @return mixed
  */
-function timer($func, &$time, LoopInterface $loop = null)
+function timer($var1, &$var2, &$var3=null)
 {
-    return Async::timer($func, $time, $loop);
+    if ($var1 instanceof LoopInterface) {
+        return Async::timerWithLoop($var1, $var2, $var3);
+    }
+    return Async::timer($var1, $var2);
 }
+
+
+/**
+ * Checks if an expression is a valid regexp
+ *
+ * @param string $exp
+ * @param LoopInterface $loop = ?
+ *
+ * @return bool
+ */
+function is_valid_regexp()
+{
+    $args = func_get_args();
+    $first = current($args);
+    if ($first instanceof LoopInterface) {
+        $loop = $first;
+        array_shift($args);
+    } else {
+        $loop = Async::getLoop();
+    }
+    $exp = current($args);
+    return Async::executeWithLoop($loop, __DIR__.'/is_valid_regexp '.escapeshellarg($exp))
+        ->then(function ($res) {
+            if ($res == 'yes') {
+                return true;
+            }
+            return false;
+        })
+        ->otherwise(function () {
+            return false;
+        });
+}
+
+
 
 }

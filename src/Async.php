@@ -906,11 +906,11 @@ final class Async
             $ignore_exp = false;
             $ignore_str = false;
             if ($ignore) {
-                $rc = @preg_match($ignore, '');
-                if ($rc === false) {
-                    $ignore_str = $ignore;
-                } else {
+                $res = yield static::executeWithLoop($loop, __DIR__.'/is_valid_regexp '.escapeshellarg($ignore));
+                if ($res == 'yes') {
                     $ignore_exp = $ignore;
+                } else {
+                    $ignore_str = $ignore;
                 }
             }
             if ($ignore_exp) {
@@ -1053,11 +1053,12 @@ final class Async
     /**
      * Measures the time of a promise
      */
-    public static function timer($func, &$time, LoopInterface $loop= null)
+    public static function timer($func, &$time)
     {
-        if (is_null($loop)) {
-            $loop = static::$loop;
-        }
+        return static::timerWithLoop(static::getLoop(), $func, $time);
+    }
+    public static function timerWithLoop(LoopInterface $loop, $func, &$time)
+    {
         $start = microtime(true);
         $prom = static::resolve($func, $loop);
         $prom->always(function () use ($start, &$time) {

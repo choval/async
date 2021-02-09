@@ -398,6 +398,19 @@ class MainTest extends TestCase
     }
 
 
+    public function testIsValidRegexp()
+    {
+        Async\wait(function () {
+            $valid = yield Async\is_valid_regexp('asd');
+            $this->assertFalse($valid);
+            $valid = yield Async\is_valid_regexp('/a/');
+            $this->assertTrue($valid);
+            $valid = yield Async\is_valid_regexp('/"/');
+            $this->assertTrue($valid);
+        });
+    }
+
+
     public static function tearDownAfterClass(): void
     {
         static::$loop->stop();

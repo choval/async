@@ -7,18 +7,18 @@ A library to ease handling promises in [ReactPHP](https://reactphp.org).
 * [Usage](#usage)
 * [License](#license)
 * Functions
-  * [async](#async) Run blocking code in async mode
-  * [execute](#execute) Execute a command
-  * [is\_done](#is_done) Instantly return if the Promise is resolved or rejected
-  * [resolve](#resolve) Use yield with promises!
-  * [retry](#retry) Retry a function multiple times
-  * [silent](#silent) Silently resolve
-  * [sleep](#sleep) Non-blocking sleep
-  * [timeout](#timeout) Adds a timeout to a Promise
-  * [timer](#timer) Allows to time a Promise
-  * [wait](#wait) Make async code synchronous
-  * [wait\_memory](#wait_memory) Waits for a number of RAM bytes to be available
-  * [PHP file functions](#file_functions) PHP's blocking file functions in async mode
+    * [async](#async) Run blocking code in async mode
+    * [execute](#execute) Execute a command
+    * [is\_done](#is_done) Instantly return if the Promise is resolved or rejected
+    * [resolve](#resolve) Use yield with promises!
+    * [retry](#retry) Retry a function multiple times
+    * [silent](#silent) Silently resolve
+    * [sleep](#sleep) Non-blocking sleep
+    * [timeout](#timeout) Adds a timeout to a Promise
+    * [timer](#timer) Allows to time a Promise
+    * [wait](#wait) Make async code synchronous
+    * [wait\_memory](#wait_memory) Waits for a number of RAM bytes to be available
+    * [PHP file functions](#file_functions) PHP's blocking file functions in async mode
 
 
 ## Install
@@ -45,6 +45,15 @@ Async\set_loop($loop);
 
 If the loop is not set, all calls except `resolve` need a [`LoopInterface`](https://github.com/reactphp/event-loop) as the first parameter.
 
+New alternative:
+
+```php
+use Choval\Async;
+
+$loop = Async\init();
+// Your code
+$loop->run();
+```
 
 ### Using yield
 
@@ -53,25 +62,25 @@ The ugly way:
 ```php
 function future($i=0)
 {
-	return new React\Promise\FulfilledPromise($i+1);
+    return new React\Promise\FulfilledPromise($i+1);
 }
 
 future()
-	->then(function ($i) {
-		return future($i);
-	})
-	->then(function ($i) {
-		return future($i);
-	})
-	->then(function ($i) {
-		return future($i);
-	})
-	->then(function ($i) {
-		return future($i);
-	})
-	->then(function ($i) {
-		echo $i;
-	});
+    ->then(function ($i) {
+        return future($i);
+    })
+    ->then(function ($i) {
+        return future($i);
+    })
+    ->then(function ($i) {
+        return future($i);
+    })
+    ->then(function ($i) {
+        return future($i);
+    })
+    ->then(function ($i) {
+        echo $i;
+    });
 
 // Prints 5, but that chain nightmare...
 ```
@@ -81,12 +90,12 @@ And we're not blocking other events in the loop ;-)
 
 ```php
 Async\resolve(function () {
-	$i = yield future();
-	$i = yield future($i);
-	$i = yield future($i);
-	$i = yield future($i);
-	$i = yield future($i);
-	echo $i;
+    $i = yield future();
+    $i = yield future($i);
+    $i = yield future($i);
+    $i = yield future($i);
+    $i = yield future($i);
+    echo $i;
 });
 
 // Prints 5 as well ;-)
@@ -96,11 +105,11 @@ Or in a while-loop
 
 ```php
 Async\resolve(function () {
-	$i = 0;
+    $i = 0;
     while($i<5) {
         $i = yield future($i);
     }
-	echo $i;
+    echo $i;
 });
 ```
 
@@ -130,9 +139,9 @@ This is what will let you `yield` promises, it's like Node.js [`await`](https://
 
 ```php
 $promise = Async\resolve(function () {
-  yield 1;
-  yield 2;
-  return 'Wazza';
+    yield 1;
+    yield 2;
+    return 'Wazza';
 });
 // $promise resolves with Wazza
 ```
@@ -142,18 +151,18 @@ Take for example the following async events.
 ```php
 $defer1 = new React\Promise\Deferred();
 $loop->addTimer(1, function () use ($defer1) {
-	$defer1->resolve('hello');
+    $defer1->resolve('hello');
 });
 $defer2 = new React\Promise\Deferred();
 $loop->addTimer(0.5, function () use ($defer2) {
-	$defer2->resolve('world');
+    $defer2->resolve('world');
 });
 
 $promise = Async\resolve(function () use ($defer1, $defer2) {
-  $out = [];
-  $out[] = yield $defer1->promise();
-  $out[] = yield $defer2->promise();
-  return implode(' ', $out);
+    $out = [];
+    $out[] = yield $defer1->promise();
+    $out[] = yield $defer2->promise();
+    return implode(' ', $out);
 });
 ```
 
@@ -163,16 +172,16 @@ What if you need to run multiple async simultaneously?
 
 ```php
 $promise = Async\resolve(function () {
-	$fetch = [
-		'bing' => 
-			Async\execute('curl https://bing.com/'),
-		'duckduckgo' => 
-			Async\execute('curl https://duckduckgo.com/'),
-		'google' => 
-			Async\execute('curl https://google.com/'),
-	];
-	$sources = yield React\Promise\all($fetch);
-	return $sources;
+    $fetch = [
+        'bing' => 
+            Async\execute('curl https://bing.com/'),
+        'duckduckgo' => 
+            Async\execute('curl https://duckduckgo.com/'),
+        'google' => 
+            Async\execute('curl https://google.com/'),
+    ];
+    $sources = yield React\Promise\all($fetch);
+    return $sources;
 });
 ```
 
@@ -202,14 +211,14 @@ Returns a `Promise` with the output of the command.
 
 ```php
 Async\execute('echo "Wazza"')
-  ->then(function ($output) {
-    // $output contains Wazza\n
-  })
-  ->otherwise(function ($e) {
-    // Throws an Exception if the execution fails
-    // ie: 127 if the command does not exist
-    $exitCode = $e->getCode();
-  });
+    ->then(function ($output) {
+        // $output contains Wazza\n
+    })
+    ->otherwise(function ($e) {
+        // Throws an Exception if the execution fails
+        // ie: 127 if the command does not exist
+        $exitCode = $e->getCode();
+    });
 ```
 
 A `timeout` parameter (in seconds) can be passed.
@@ -220,10 +229,10 @@ An asynchronous `sleep` function. This won't block other events.
 
 ```php
 $promise = Async\resolve(function () {
-  $start = time();
-  yield Async\sleep(2);
-  $end = time();
-  return $end-$start;
+    $start = time();
+    yield Async\sleep(2);
+    $end = time();
+    return $end-$start;
 });
 // $promise resolves in ~2 seconds
 ```
@@ -264,8 +273,8 @@ First parameter is a callable, second parameter is an array of parameters for th
 
 ```php
 $blocking_code = function ($secs) {
-  sleep($secs);
-  return time();
+    sleep($secs);
+    return time();
 }
 
 $secs = 1;
@@ -278,7 +287,7 @@ $base = time()+$secs;
 
 $times = Async\wait(React\Promise\all($promises));
 foreach ($times as $time) {
-	// $time === $base
+    // $time === $base
 }
 ```
 
@@ -303,16 +312,16 @@ This function can also ignore a set of Exception classes or messages.
 ```php
 $times = 5;
 $func = function () use (&$times) {
-  if(--$times) {
-    throw new \Exception('bad error');
-  }
-  return 'ok';
+    if(--$times) {
+        throw new \Exception('bad error');
+    }
+    return 'ok';
 };
 $retries = 6;
 Async\retry($func, $retries, 0.1, 'bad error')
-  ->then(function ($res) {
-    // $res is 'ok'
-  });
+    ->then(function ($res) {
+        // $res is 'ok'
+    });
 ```
 
 ```php
@@ -410,9 +419,9 @@ $files has:
 <a name="file_functions"></a>
 ### PHP file functions
 
-The following functions are available with the same parameters as their PHP versions, but run using `Async\async` and accept a `LoopInterface` as their first parameter.
+The following functions are available with the same parameters as their PHP versions, but run using `Async\async` and take an optional `LoopInterface` as their first parameter.
 
-These are not ready for production and/or not tested/optimized. Please use with caution.
+These are not production tested/optimized. Please use with caution.
 
 ```
 file_get_contents

@@ -121,7 +121,9 @@ class ExecuteTest extends TestCase
     {
         Async\wait(function () {
             $g = false;
-            yield Async\silent(Async\execute('echo hello', 1, function($d) use (&$g) { $g = trim($d); }));
+            yield Async\silent(Async\execute('echo hello', 1, function ($d) use (&$g) {
+                $g = trim($d);
+            }));
             $this->assertEquals('hello', $g);
         });
     }

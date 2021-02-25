@@ -23,6 +23,10 @@ use React\Stream\ReadableStreamInterface;
  */
 function init()
 {
+    $has_loop = Async::hasLoop();
+    if ($has_loop) {
+        return Async::getLoop();
+    }
     $loop = Factory::create();
     Async::setLoop($loop);
     return $loop;

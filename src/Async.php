@@ -164,9 +164,9 @@ final class Async
 
 
     /**
-     *
      * Gets the loop to use if none passed
      *
+     * @return LoopInterface
      */
     public static function getLoop()
     {
@@ -174,6 +174,18 @@ final class Async
             throw new \RuntimeException('ReactPHP EventLoop not set');
         }
         return static::$loop;
+    }
+
+
+
+    /**
+     * Returns if a loop was set
+     *
+     * @return bool
+     */
+    public static function hasLoop()
+    {
+        return static::$loop ? true : false;
     }
 
 

@@ -532,8 +532,9 @@ final class Async
                 if (socket_create_pair($domain, SOCK_STREAM, 0, $sockets) === false) {
                     return new RejectedPromise(new Exception('socket_create_pair failed: ' . socket_strerror(socket_last_error()), 0, $trace));
                 }
-
+                gc_collect_cycles(); // Garbage collect before forking
                 $pid = pcntl_fork();
+
                 if ($pid == -1) {
                     static::removeFork($id);
                     return new RejectedPromise(new Exception('Async fork failed', 0, $trace));
@@ -544,25 +545,25 @@ final class Async
                         while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
                             $buffer .= $chunk;
                         }
+                        unset($chunk);
                         $waitpid = pcntl_waitpid($pid, $status, \WNOHANG);
                         if ($waitpid > 0) {
                             static::removeFork($id);
                             $loop->cancelTimer($timer);
-                            /*
-                            while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) !== false) {
-                                $buffer .= $chunk;
-                            }
-                             */
                             $data = unserialize($buffer);
+                            unset($buffer);
                             if (is_a($data, \Exception::class)) {
                                 $defer->reject($data);
                             } else {
                                 $defer->resolve($data);
                             }
+                            unset($data);
                             @socket_close($sockets[1]);
                             @socket_close($sockets[0]);
+                            unset($sockets);
                             return;
                         } elseif ($waitpid < 0) {
+                            unset($buffer);
                             static::removeFork($id);
                             $loop->cancelTimer($timer);
                             if (!pcntl_wifexited($status)) {
@@ -576,6 +577,10 @@ final class Async
                         }
                     });
                 } else {
+                    if (static::$loop) {
+                        static::$loop->stop();
+                    }
+                    static::$forks=[];
                     // Child
                     register_shutdown_function(function () {
                         $sig = 9;   // SIGKILL doesn't close the resources

@@ -70,19 +70,40 @@ class AsyncTest extends TestCase
             \usleep(0.1);
             return $i;
         };
+        $start = microtime(true);
         $promises = [];
         for ($i = 0;$i < $limit;$i++) {
             $promises[] = Async\async($func, [$i]);
         }
-        $start = microtime(true);
         $res = Async\wait(Promise\all($promises));
         foreach ($res as $k=>$v) {
-            $this->assertEquals($k, $v);
+            $this->assertStringContainsString($k, $v);
         }
         $end = microtime(true);
         $diff = $end - $start;
         $this->assertLessThanOrEqual(($limit / $factor), $diff);
         $this->assertEquals($limit, count($res));
+    }
+
+
+    public function testAsyncMemoryStress()
+    {
+        $factor = 3;
+        $limit = Async\get_forks_limit();
+        $limit *= $factor;
+        // Tests memory
+        $func = function ($i) {
+            return $i.str_repeat(' ', 1024*1024);
+        };
+        $startmem = memory_get_usage(true);
+        $promises = [];
+        for ($i = 0;$i < $limit;$i++) {
+            $res = Async\wait(Async\async($func, [$i]));
+            $this->assertStringContainsString($i, $res);
+        }
+        $endmem = memory_get_usage(true);
+        $diffmem = $endmem - $startmem;
+        $this->assertLessThanOrEqual(($limit/$factor)*1024*1024, $diffmem);
     }
 
 

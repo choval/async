@@ -1044,6 +1044,9 @@ final class Async
         }
         $usage = memory_get_usage();
         $diff = static::$mem_limit - $usage;
+        if ($bytes > static::$mem_limit) {
+            throw new Exception('Cannot wait for more memory than the allowed limit of '.static::$mem_limit);
+        }
         if ($diff >= $bytes) {
             return $diff;
         }

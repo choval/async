@@ -661,16 +661,29 @@ final class Async
                     },
                     function ($e) use ($generator, $defer, &$promise, $loop, &$func) {
                         try {
-                            $generator->throw($e);
-                            if ($generator->valid()) {
-                                $promise = $generator->current();
-                                $loop->addTimer(0, $func);
+                            if (is_array($e)) {
+                                while (($te=array_shift($e))) {
+                                    $generator->throw($te);
+                                    if ($generator->valid()) {
+                                        $promise = $generator->current();
+                                        $loop->addTimer(0, $func);
+                                    } else {
+                                        $return = $generator->getReturn();
+                                        return $defer->resolve($return);
+                                    }
+                                }
                             } else {
-                                $return = $generator->getReturn();
-                                return $defer->resolve($return);
+                                $generator->throw($e);
+                                if ($generator->valid()) {
+                                    $promise = $generator->current();
+                                    $loop->addTimer(0, $func);
+                                } else {
+                                    $return = $generator->getReturn();
+                                    return $defer->resolve($return);
+                                }
                             }
-                        } catch (\Throwable $e) {
-                            return $defer->reject($e);
+                        } catch (\Throwable $ee) {
+                            return $defer->reject($ee);
                         }
                     }
                 );

@@ -220,7 +220,9 @@ final class Async
         }
         $res = null;
         $err = null;
-        $promise = static::resolve($promise, $loop);
+        if (!is_a($promise, PromiseInterface::class)) {
+            $promise = static::resolve($promise, $loop);
+        }
         if (!is_null($timeout)) {
             $promise = static::timeoutWithLoop($loop, $promise, $timeout);
         }

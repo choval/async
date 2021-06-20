@@ -579,9 +579,11 @@ final class Async
                         }
                     });
                 } else {
+                    /*
                     if (static::$loop) {
                         static::$loop->stop();
                     }
+                     */
                     static::$forks=[];
                     // Child
                     register_shutdown_function(function () {

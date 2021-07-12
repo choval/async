@@ -7,6 +7,7 @@ use Choval\Async\Exception;
 use Closure;
 use Generator;
 use React\ChildProcess\Process;
+use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
 use React\Promise;
 use React\Promise\Deferred;
@@ -171,7 +172,8 @@ final class Async
     public static function getLoop()
     {
         if (empty(static::$loop)) {
-            throw new \RuntimeException('ReactPHP EventLoop not set');
+            $loop = Loop::get();
+            static::setLoop($loop);
         }
         return static::$loop;
     }

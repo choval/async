@@ -10,7 +10,6 @@ namespace Choval\Async {
 use Choval\Async\Async;
 use Closure;
 use Generator;
-use React\EventLoop\Factory;
 use React\EventLoop\LoopInterface;
 use React\Promise\Promise;
 use React\Promise\Stream;
@@ -23,13 +22,7 @@ use React\Stream\ReadableStreamInterface;
  */
 function init()
 {
-    $has_loop = Async::hasLoop();
-    if ($has_loop) {
-        return Async::getLoop();
-    }
-    $loop = Factory::create();
-    Async::setLoop($loop);
-    return $loop;
+    return Async::getLoop();
 }
 
 

@@ -29,42 +29,22 @@ composer require choval/async
 
 ## Notes
 
-Currently used in production systems with PHP 7.4.
+Currently used in production systems with PHP 7.4 & PHP 8.0.
 
 ## Usage
 
-```php
-use Choval\Async;
-use React\EventLoop\Factory;
-
-$loop = Factory::create();
-
-// Set the Loop to avoid having to pass it with every call.
-Async\set_loop($loop);
-```
-
-If the loop is not set, all calls except `resolve` need a [`LoopInterface`](https://github.com/reactphp/event-loop) as the first parameter.
-
-New alternative:
-
-```php
-use Choval\Async;
-
-$loop = Async\init();
-// Your code
-$loop->run();
-```
-
-### Using yield
-
-The ugly way:
+Having the following function
 
 ```php
 function future($i=0)
 {
     return new React\Promise\FulfilledPromise($i+1);
 }
+```
 
+The ugly way:
+
+```php
 future()
     ->then(function ($i) {
         return future($i);
@@ -126,6 +106,10 @@ $loop->addTimer(1, function () use ($defer) {
 });
 $promise = $defer->promise();
 $i = 0;
+function future($i=0)
+{   
+    return new React\Promise\FulfilledPromise($i+1);
+}
 while(!Async\is_done($promise)) {
     $i++;
 }
@@ -355,10 +339,12 @@ Saves the number of elapsed microseconds (float).
 
 ```php
 Async\wait(function () {
+
     Async\timer(function () {
         Async\sleep(0.1);
     }, $msecs);
     print_r($msecs); // ~100ms
+
 });
 ```
 
@@ -369,12 +355,14 @@ This is used inside loops to avoid memory exhaution due to multiple Promises bei
 
 ```php
 Async\wait(function () {
+
     $loop = 20000;
     $mem = 1024*1024*16; // 16MB
     while($loop--) {
         yield Async\waitMemory($mem);
         Async\sleep(1);
     }
+
 });
 ```
 

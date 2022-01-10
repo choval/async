@@ -67,7 +67,7 @@ class AsyncTest extends TestCase
         $limit = Async\get_forks_limit();
         $limit *= $factor;
         $func = function ($i) {
-            \usleep(0.1);
+            \usleep(1);
             return $i;
         };
         $start = microtime(true);
@@ -133,7 +133,7 @@ class AsyncTest extends TestCase
             $res = Async\wait(
                 Async\async(function () use ($i) {
                     for ($e = 0;$e < 8;$e++) {
-                        usleep(0.1);
+                        \usleep(1);
                         $i++;
                     }
                     return $i;

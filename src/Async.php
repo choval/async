@@ -298,6 +298,9 @@ final class Async
     }
     public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0, callable $outputfn=null)
     {
+        if (!extension_loaded('pcntl')) {
+            throw new Exception('PHP extension pcntl not available', 500);
+        }
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
         }
@@ -525,6 +528,9 @@ final class Async
     }
     public static function asyncWithLoop(LoopInterface $loop, $func, array $args = [])
     {
+        if (!extension_loaded('pcntl')) {
+            throw new Exception('PHP extension pcntl not available', 500);
+        }
         $defer = new Deferred();
         $id = random_bytes(16);
         $trace = debug_backtrace();

@@ -27,9 +27,10 @@ A library to ease handling promises in [ReactPHP](https://reactphp.org).
 composer require choval/async
 ```
 
-## Notes
+## Requirements
 
-Currently used in production systems with PHP 7.4 & PHP 8.0.
+* PHP 7.2+ or PHP 8.0+
+* pcntl for `async` & `execute`
 
 ## Usage
 

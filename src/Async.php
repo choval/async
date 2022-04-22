@@ -195,11 +195,11 @@ final class Async
     /**
      * Wait
      */
-    public static function wait($promise, float $timeout = null, float $interval = 0.01)
+    public static function wait($promise, float $timeout = null, float $interval = 0.0001)
     {
         return static::waitWithLoop(static::getLoop(), $promise, $timeout, $interval);
     }
-    public static function waitWithLoop(LoopInterface $loop, $promise, float $timeout = null, float $interval = 0.01)
+    public static function waitWithLoop(LoopInterface $loop, $promise, float $timeout = null, float $interval = 0.0001)
     {
         return static::syncWithLoop($loop, $promise, $timeout, $interval);
     }
@@ -211,11 +211,11 @@ final class Async
      * We run Block\await with a catch multiple times, to avoid having
      * it block timers and promises added to the loop after calling sync.
      */
-    public static function sync($promise, float $timeout = null, float $interval = 0.01)
+    public static function sync($promise, float $timeout = null, float $interval = 0.0001)
     {
         return static::syncWithLoop(static::getLoop(), $promise, $timeout, $interval);
     }
-    public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null, float $interval = 0.01)
+    public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null, float $interval = 0.0001)
     {
         if ($interval < 0) {
             throw new Exception('Interval must be 0 or positive float');
@@ -380,7 +380,7 @@ final class Async
                     if (empty($pid)) {
                         $pid = $proc->getPid();
                     }
-                    $loop->addTimer(0.001, function () use ($pid) {
+                    $loop->addTimer(0.0001, function () use ($pid) {
                         pcntl_waitpid($pid, $status, \WNOHANG);
                     });
                     if ($err) {
@@ -448,11 +448,11 @@ final class Async
     /**
      * Retry
      */
-    public static function retry($func, int $retries = 10, float $frequency = 0.001, $ignore_errors = null)
+    public static function retry($func, int $retries = 10, float $frequency = 0.0001, $ignore_errors = null)
     {
         return static::retryWithLoop(static::getLoop(), $func, $retries, $frequency, $ignore_errors);
     }
-    public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.001, $ignore_errors = null)
+    public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.0001, $ignore_errors = null)
     {
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
         $promise = null;
@@ -551,7 +551,7 @@ final class Async
                 } elseif ($pid) {
                     // Parent
                     $buffer = '';
-                    $loop->addPeriodicTimer(0.001, function ($timer) use ($pid, $defer, &$sockets, $loop, &$buffer, $id, $trace) {
+                    $loop->addPeriodicTimer(0.0001, function ($timer) use ($pid, $defer, &$sockets, $loop, &$buffer, $id, $trace) {
                         while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
                             $buffer .= $chunk;
                         }

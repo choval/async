@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+    push:
+        branches:
+            - main
+    workflow_dispatch:
+        inputs:
+            git-ref:
+                description: Optional git ref (commit/branch/etc)
+                required: false
+
+jobs:
+
+    phpunit:
+        name: phpunit
+        runs-on: ubuntu-latest
+        steps:
+            - id: clone code
+              uses: actions/checkout@v3
+            - id: install composer
+              uses: php-actions/composer@v5
+            - id: phpunit
+              uses: php-actions/phpunit@v3
+

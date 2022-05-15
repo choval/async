@@ -145,4 +145,43 @@ class AsyncTest extends TestCase
         Async\wait($promise, 1.2);
         $this->assertGreaterThanOrEqual(0.8, $i);
     }
+
+
+
+    public function testExceptionInAsync()
+    {
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('test');
+        $promise = Async\async(function () {
+            throw new \Exception('test');
+            return true;
+        });
+        Async\wait($promise, 0.1);
+    }
+
+
+
+    public function testRetryStressWithAsync()
+    {
+        $times = 100;
+        $id = uniqid();
+        $func = function () use (&$times, $id) {
+            $times--;
+            return Async\async(function () use ($id, $times) {
+                if ($times) {
+                    throw new \Exception('bad error async');
+                }
+                return $id;
+            });
+        };
+        $retries = $times+1;
+        $res = Async\wait(Async\retry(
+            fn: $func,
+            retries: $retries,
+            frequency: 0.01,
+            ignores: 'bad error async'
+        ), $retries*0.1);
+        $this->assertEquals($id, $res);
+        $this->assertEquals(0, $times);
+    }
 }

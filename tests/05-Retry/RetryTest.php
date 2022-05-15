@@ -80,24 +80,4 @@ class RetryTest extends TestCase
         $this->assertEquals($id, $res);
         $this->assertEquals(0, $times);
     }
-
-
-    public function testRetryStressWithAsync()
-    {
-        $times = 10;
-        $id = uniqid();
-        $func = function () use (&$times, $id) {
-            --$times;
-            return Async\async(function () use ($id, $times) {
-                if ($times) {
-                    throw new \Exception('bad error async');
-                }
-                return $id;
-            });
-        };
-        $retries = $times + 1;
-        $res = Async\wait(Async\retry($func, $retries, 0.1, 'bad error async'), 10);
-        $this->assertEquals($id, $res);
-        $this->assertEquals(0, $times);
-    }
 }

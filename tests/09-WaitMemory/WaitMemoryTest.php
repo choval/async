@@ -22,6 +22,7 @@ class WaitMemoryTest extends TestCase
     public function testWaitMemory()
     {
         Async\wait(function () {
+            Async\load_memory_limit('128M');
             $size = 4096;
             $mem_req = 1024*1024*16;    // 16MB
             $init_free = $free = yield Async\wait_memory($mem_req);

@@ -46,8 +46,8 @@ class FilesTest extends TestCase
             }
             $end = microtime(true);
             $diff = $end-$start;
-            // Check it takes no more than 50 milisecs
-            $this->assertLessThan($orig*0.05, $diff);
+            // Check it takes no more than 100 milisecs
+            $this->assertLessThan($orig*0.1, $diff);
         });
     }
 

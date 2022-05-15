@@ -1,9 +1,16 @@
-name: Tests
+name: tests
 
 on:
+    pull_request:
+        types:
+            - opened
+            - edited
+            - synchronize
+            - reopened
     push:
         branches:
             - main
+            - master
     workflow_dispatch:
         inputs:
             git-ref:
@@ -16,10 +23,17 @@ jobs:
         name: phpunit
         runs-on: ubuntu-latest
         steps:
-            - id: clone code
+            - name: Clone Repository (Latest)
               uses: actions/checkout@v3
-            - id: install composer
+              if: github.event.inputs.git-ref == ''
+            - name: Clone Repository (Custom Ref)
+              uses: actions/checkout@v3
+              if: github.event.inputs.git-ref != ''
+              with:
+                ref: ${{ github.event.inputs.git-ref }}
+            - name: Install composer
               uses: php-actions/composer@v5
-            - id: phpunit
-              uses: php-actions/phpunit@v3
+            - name: Run tests
+              run: |
+                ./vendor/bin/phpunit
 

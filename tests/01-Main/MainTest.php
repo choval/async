@@ -125,11 +125,11 @@ class MainTest extends TestCase
         function a()
         {
             return Async\resolve(function () {
-                yield Async\sleep(1);
+                yield Async\sleep(0.1);
                 return true;
             });
         }
-        $res = Async\wait(a(), 2);
+        $res = Async\wait(a(), 0.2);
         $this->assertTrue($res);
     }
 
@@ -150,16 +150,16 @@ class MainTest extends TestCase
             $msg = $e->getMessage();
         }
         $this->assertEquals($rand, $msg);
-        
+
         $func2 = function () {
             throw new \Exception('Crap');
         };
-        
+
         $func3 = function () use ($func2) {
             $var = yield $func2();
             return $var;
         };
-        
+
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Crap');
         $msg = Async\wait(Async\resolve($func3), 1);
@@ -196,7 +196,7 @@ class MainTest extends TestCase
         $res = Async\wait(Async\resolve(function () {
             $res = false;
             try {
-                yield Async\execute('sleep 2', 1);
+                yield Async\execute('sleep 1', 0.01);
                 $res = false;
             } catch (\Exception $e) {
                 $res = true;
@@ -320,9 +320,9 @@ class MainTest extends TestCase
     public function testAsyncResolveMemoryUsage()
     {
         $times = 100;
-        $mem_limit = false;
+        $mem_records = [];
         while ($times--) {
-            Async\wait(function () use (&$mem_limit) {
+            Async\wait(function () use (&$mem_records) {
                 $limit = 10000;
                 $i = 0;
                 while ($limit--) {
@@ -330,12 +330,14 @@ class MainTest extends TestCase
                     $i++;
                 }
                 $mem = memory_get_usage(true);
-                if (!$mem_limit) {
-                    $mem_limit = $mem;
-                }
-                $this->assertLessThanOrEqual($mem_limit, $mem);
+                $mem_records[] = $mem;
             });
         }
+        $max = max($mem_records);
+        $values = array_count_values($mem_records);
+        arsort($values);
+        $freq = key($values);
+        $this->assertLessThanOrEqual($freq, $max);
     }
 
 
@@ -345,8 +347,8 @@ class MainTest extends TestCase
         $defer = new Deferred();
         $promise = $defer->promise();
         $this->expectException(AsyncException::class);
-        $this->expectExceptionMessage('Timed out after 0.5 secs');
-        $res = Async\wait(Async\timeout($promise, 0.5), 1);
+        $this->expectExceptionMessage('Timed out after 0.01 secs');
+        $res = Async\wait(Async\timeout($promise, 0.01), 0.1);
     }
 
 
@@ -361,7 +363,7 @@ class MainTest extends TestCase
             $this->assertEmpty($res);
             $this->assertInstanceOf(Exception::class, $e);
 
-            $res = yield Async\silent(Async\timeout(Async\execute('sleep 1'), 0.1), $e);
+            $res = yield Async\silent(Async\timeout(Async\execute('sleep 1'), 0.01), $e);
             $this->assertEmpty($res);
             $this->assertInstanceOf(Exception::class, $e);
         });
@@ -380,7 +382,7 @@ class MainTest extends TestCase
             $res = yield Async\silent($fn);
             $this->assertTrue($a);
             $a = false;
-            $res = yield Async\silent(Async\timeout(Async\silent($fn), 0.1), $e);
+            $res = yield Async\silent(Async\timeout(Async\silent($fn), 0.01), $e);
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertFalse($a);
         });
@@ -390,7 +392,7 @@ class MainTest extends TestCase
     public function testAsyncTimer()
     {
         Async\wait(function () {
-            $delay = 0.1;
+            $delay = 0.01;
             yield Async\timer(Async\sleep($delay), $time);
             $pct = round($time / $delay * 100);
             $abs = abs(100 - $pct);

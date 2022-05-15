@@ -34,7 +34,7 @@ class ExecuteTest extends TestCase
 
     public function testStress()
     {
-        $limit = 1000;
+        $limit = 100;
         for ($i=0;$i<$limit;$i++) {
             $rand = rand();
             $out = Async\wait(Async\execute('echo '. $rand), 1);
@@ -46,28 +46,28 @@ class ExecuteTest extends TestCase
     public function testExecuteKill()
     {
         $this->expectException(\Exception::class);
-        $res = Async\wait(Async\execute('sleep 1', 0.5));
+        $res = Async\wait(Async\execute('sleep 1 && echo out', 0.01));
     }
 
 
-    public function testZombieGeneratedWhenPromiseCanceled()
+    public function testNoZombieGeneratedWhenPromiseCanceled()
     {
         Async\wait(function () {
             $e = '';
-            $res = yield Async\silent(Async\timeout(Async\execute('sleep 1'), 0.1), $e);
-            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $res = yield Async\silent(Async\timeout(Async\execute('sleep 2'), 0.01), $e);
+            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
             $this->assertInstanceOf(AsyncException::class, $e);
             $this->assertEmpty($zombies);
         });
     }
 
 
-    public function testZombieOnProcessExit()
+    public function testNoZombieOnProcessExit()
     {
         Async\wait(function () {
             yield Async\silent(Async\execute('ls "this should return exit1"'), $e);
             $this->assertInstanceOf(AsyncException::class, $e);
-            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
             $this->assertEmpty($zombies);
 
             // Now, SPAM IT!
@@ -77,7 +77,7 @@ class ExecuteTest extends TestCase
                 $promises[] = Async\silent(Async\execute('ls "this should return exit1"'), $eses[$i]);
             }
             yield Promise\all($promises);
-            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
             $this->assertEmpty($zombies);
             foreach ($eses as $e) {
                 $this->assertInstanceOf(AsyncException::class, $e);
@@ -92,12 +92,13 @@ class ExecuteTest extends TestCase
             $promises = [];
             $eses = [];
             for ($i=0;$i<100;$i++) {
-                $promises[] = Async\silent(Async\execute('sleep 1', 0.1), $eses[$i]);
+                $eses[$i] = false;
+                $promises[] = Async\silent(Async\execute('sleep 1 && echo '.$i, 0.01), $eses[$i]);
             }
             yield Promise\all($promises);
-            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
             $this->assertEmpty($zombies);
-            foreach ($eses as $e) {
+            foreach ($eses as $i=>$e) {
                 $this->assertInstanceOf(AsyncException::class, $e);
             }
         });
@@ -110,8 +111,8 @@ class ExecuteTest extends TestCase
             $sleepbin = __DIR__.'/../scripts/phpsleep';
             $sleepbin = realpath($sleepbin);
             $cmd = 'echo chain && '.$sleepbin.' 2';
-            yield Async\silent(Async\execute($cmd, 0.1));
-            $zombies = yield Async\silent(Async\execute('ps aux|grep " Z "|grep -v "grep"'));
+            yield Async\silent(Async\execute($cmd, 0.01));
+            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
             $this->assertEmpty($zombies);
         });
     }

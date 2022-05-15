@@ -12,6 +12,7 @@ use Closure;
 use Generator;
 use React\EventLoop\LoopInterface;
 use React\Promise\Promise;
+use React\Promise\PromiseInterface;
 use React\Promise\Stream;
 use React\Stream\ReadableStreamInterface;
 
@@ -34,7 +35,7 @@ function init()
  * @param string $limit = null
  * @return int
  */
-function load_memory_limit($limit = null)
+function load_memory_limit(?string $limit = null)
 {
     return Async::loadMemLimit($limit);
 }
@@ -47,7 +48,7 @@ function load_memory_limit($limit = null)
  * @param string $limit = null
  * @return int
  */
-function load_mem_limit($limit = null)
+function load_mem_limit(?string $limit = null)
 {
     return Async::loadMemLimit($limit);
 }
@@ -109,21 +110,27 @@ function get_forks_limit()
 /**
  * Wait for a promise (makes code synchronous) or stream (buffers)
  *
- * @param LoopInterface $loop = ?
+ * @param LoopInterface $loop
  * @param string $cmd
- * @param float $timeout = ?
+ * @param float $timeout
  *
  * @return mixed
  */
-function wait()
-{
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+function wait(
+    $promise,
+    ?float $timeout = null,
+    float $interval = 0.0001,
+    ?LoopInterface $loop = null
+) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'waitWithLoop'], $args);
+    return Async::waitWithLoop(
+        loop: $loop,
+        promise: $promise,
+        timeout: $timeout,
+        interval: $interval
+    );
 }
 
 
@@ -131,21 +138,27 @@ function wait()
 /**
  * Alias of wait
  *
- * @param LoopInterface $loop = ?
+ * @param LoopInterface $loop
  * @param string $cmd
- * @param float $timeout = ?
+ * @param float $timeout
  *
  * @return mixed
  */
-function sync()
-{
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+function sync(
+    $promise,
+    ?float $timeout = null,
+    float $interval = 0.0001,
+    ?LoopInterface $loop = null
+) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'syncWithLoop'], $args);
+    return Async::syncWithLoop(
+        loop: $loop,
+        promise: $promise,
+        timeout: $timeout,
+        interval: $interval
+    );
 }
 
 
@@ -153,20 +166,22 @@ function sync()
 /**
  * Non blocking sleep, that allows Loop to keep ticking in the back
  *
- * @param LoopInterface $loop = ?
+ * @param LoopInterface $loop
  * @param float $time
  *
  * @return Promise
  */
-function sleep()
-{
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+function sleep(
+    float $time,
+    ?LoopInterface $loop = null
+) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'sleepWithLoop'], $args);
+    return Async::sleepWithLoop(
+        loop: $loop,
+        time: $time
+    );
 }
 
 
@@ -174,21 +189,27 @@ function sleep()
 /**
  * Executes a command, returns the buffered response
  *
- * @param LoopInterface $loop = ?
+ * @param LoopInterface $loop
  * @param string $cmd
  * @param float $timeout = -1
  *
  * @return Promise
  */
-function execute()
-{
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+function execute(
+    string $cmd,
+    float $timeout = 0,
+    ?callable $outputfn=null,
+    ?LoopInterface $loop=null
+) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'executeWithLoop'], $args);
+    return Async::executeWithLoop(
+        loop: $loop,
+        cmd: $cmd,
+        timeout: $timeout,
+        outputfn: $outputfn
+    );
 }
 
 
@@ -202,15 +223,19 @@ function execute()
  *
  * @return Promise
  */
-function async()
-{
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+function async(
+    $fn,
+    array $args = [],
+    ?LoopInterface $loop = null
+) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'asyncWithLoop'], $args);
+    return Async::asyncWithLoop(
+        loop: $loop,
+        fn: $fn,
+        args: $args
+    );
 }
 
 
@@ -218,23 +243,31 @@ function async()
 /**
  * Retries a function for X times and eventually returns the exception.
  *
- * @param LoopInterface $loop = ?
- * @param callable $func
+ * @param ?LoopInterface $loop
+ * @param $fn
  * @param int $retries = 10
  * @param float $frequency = 0.1
- * @param mixed $ignoreErrors = []
+ * @param ?mixed $ignores
  *
  * @return Promise
  */
-function retry()
-{
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+function retry(
+    $fn,
+    int $retries = 10,
+    float $frequency = 0.01,
+    $ignores = null,
+    ?LoopInterface $loop = null
+) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'retryWithLoop'], $args);
+    return Async::retryWithLoop(
+        loop: $loop,
+        fn: $fn,
+        retries: $retries,
+        frequency: $frequency,
+        ignores: $ignores
+    );
 }
 
 
@@ -242,14 +275,14 @@ function retry()
 /**
  * Resolves a Generator or Closure
  *
- * @param LoopInterface $loop = ?
- * @param Generator|Closure $gen
+ * @param LoopInterface $loop
+ * @param Generator|Closure $fn
  *
  * @return Promise
  */
-function resolve($gen, LoopInterface $loop = null)
+function resolve($fn, ?LoopInterface $loop = null)
 {
-    return Async::resolve($gen, $loop);
+    return Async::resolve($fn, $loop);
 }
 
 
@@ -257,15 +290,15 @@ function resolve($gen, LoopInterface $loop = null)
 /**
  * Calls and saves exceptions instead of throwing them
  *
- * @param LoopInterface $loop = ?
- * @param Generator|Closure|Promise $gen
+ * @param LoopInterface $loop
+ * @param Generator|Closure|Promise $fn
  * @param Exception $e
  *
  * @return Promise
  */
-function silent($gen, &$exception=false, LoopInterface $loop = null)
+function silent($fn, &$exception=false, ?LoopInterface $loop = null)
 {
-    return Async::resolveSilent($gen, $exception, $loop);
+    return Async::resolveSilent($fn, $exception, $loop);
 }
 
 
@@ -274,11 +307,11 @@ function silent($gen, &$exception=false, LoopInterface $loop = null)
  * Buffers a stream and returns a promise
  *
  * @param ReadableStreamInterface $stream
- * @param int $maxLength = ?
+ * @param int $maxLength
  *
  * @return Promise
  */
-function buffer(ReadableStreamInterface $stream, $maxLength = null)
+function buffer(ReadableStreamInterface $stream, int $maxLength = null)
 {
     return Stream\buffer($stream, $maxLength);
 }
@@ -287,21 +320,18 @@ function buffer(ReadableStreamInterface $stream, $maxLength = null)
 /**
  * Timeout
  *
- * @param LoopInterface $loop = ?
- * @param Generator|Closure|Promise $func
+ * @param LoopInterface $loop
+ * @param Generator|Closure|Promise $fn
  * @param float $timeout
  *
  * @return Promise
  */
-function timeout()
+function timeout($fn, float $timeout, ?LoopInterface $loop=null)
 {
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'timeoutWithLoop'], $args);
+    return Async::timeoutWithLoop($loop, $fn, $timeout);
 }
 
 
@@ -452,15 +482,12 @@ function glob()
  *
  * @return array
  */
-function rglob()
+function rglob(string $pattern, string $ignore = '', int $flags = 0, ?LoopInterface $loop=null)
 {
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'rglobWithLoop'], $args);
+    return Async::rglobWithLoop($loop, $pattern, $ignore, $flags);
 }
 
 
@@ -472,15 +499,12 @@ function rglob()
  *
  * @return bool
  */
-function is_done()
+function is_done(PromiseInterface $promise, &$result=null, ?LoopInterface $loop=null)
 {
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'isDoneWithLoop'], $args);
+    return Async::isDoneWithLoop($loop, $promise, $result);
 }
 
 
@@ -490,15 +514,12 @@ function is_done()
  *
  * @return int
  */
-function wait_memory()
+function wait_memory(int $bytes, float $freq=0.000001, ?LoopInterface $loop=null)
 {
-    $args = func_get_args();
-    $first = current($args);
-    if (!($first instanceof LoopInterface)) {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
-        array_unshift($args, $loop);
     }
-    return call_user_func_array([Async::class, 'waitMemoryWithLoop'], $args);
+    return Async::waitMemoryWithLoop($loop, $bytes, $freq);
 }
 
 
@@ -511,12 +532,12 @@ function wait_memory()
  *
  * @return mixed
  */
-function timer($var1, &$var2, &$var3=null)
+function timer($fn, &$time, ?LoopInterface $loop=null)
 {
-    if ($var1 instanceof LoopInterface) {
-        return Async::timerWithLoop($var1, $var2, $var3);
+    if (is_null($loop)) {
+        $loop = Async::getLoop();
     }
-    return Async::timer($var1, $var2);
+    return Async::timerWithLoop($loop, $fn, $time);
 }
 
 
@@ -528,27 +549,15 @@ function timer($var1, &$var2, &$var3=null)
  *
  * @return bool
  */
-function is_valid_regexp()
+function is_valid_regexp(string $regexp, ?LoopInterface $loop=null)
 {
-    $args = func_get_args();
-    $first = current($args);
-    if ($first instanceof LoopInterface) {
-        $loop = $first;
-        array_shift($args);
-    } else {
+    if (is_null($loop)) {
         $loop = Async::getLoop();
     }
-    $exp = current($args);
-    return Async::executeWithLoop($loop, __DIR__.'/is_valid_regexp '.escapeshellarg($exp))
-        ->then(function ($res) {
-            if ($res == 'yes') {
-                return true;
-            }
-            return false;
-        })
-        ->otherwise(function () {
-            return false;
-        });
+    return Async::asyncWithLoop($loop, function () use ($regexp) {
+        error_reporting(0);
+        return preg_match($regexp, null) === false ? false : true;
+    });
 }
 
 

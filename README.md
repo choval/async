@@ -1,5 +1,6 @@
-# Choval\Async
+[![tests](https://github.com/choval/async/actions/workflows/tests.yml/badge.svg)](https://github.com/chequeas/async/actions/workflows/tests.yml)
 
+# Choval\Async
 
 A library to ease handling promises in [ReactPHP](https://reactphp.org).
 
@@ -29,8 +30,11 @@ composer require choval/async
 
 ## Requirements
 
-* PHP 7.2+ or PHP 8.0+
-* pcntl for `async` & `execute`
+* PHP 8.0+
+* for `async` & `execute`:
+    * ext-pcntl
+    * ext-posix
+    * ext-sockets
 
 ## Usage
 
@@ -172,9 +176,6 @@ $promise = Async\resolve(function () {
 
 #### Memory usage
 
-If `Async\resolve` is called without an `EventLoop` (as the second parameter), it will fall back to unwrapping the Generator by chaining promises, which can use a considerably high ammount of memory if `yield` is inside a loop.  
-Therefore, `resolve` will try to retrieve the `EventLoop` set from `Async\init` or `Async\setLoop`.
-
 ### silent
 
 Similar to `resolve`, but will catch any `Exception` and save it in the second parameter.  
@@ -311,11 +312,10 @@ Async\retry($func, $retries, 0.1, 'bad error')
 
 ```php
 /**
- * @param LoopInterface $loop (optional)
  * @param callable $func
  * @param int $retries=10 (optional)
  * @param float $frequency=0.001 (optional)
- * @param string $ignore_errors (optional) The Throwable class to catch or string to match against Exception->getMessage()
+ * @param string $ignoress (optional) The Throwable class to catch or string to match against Exception->getMessage()
  *
  * @return Promise
  */

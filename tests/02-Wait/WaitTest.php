@@ -40,7 +40,7 @@ class WaitTest extends TestCase
     public function testSyncTimeout()
     {
         $this->expectException(AsyncException::class);
-        $res = Async\wait(Async\sleep(1), 0.5);
+        $res = Async\wait(Async\sleep(0.1), 0.05);
     }
 
 
@@ -48,11 +48,11 @@ class WaitTest extends TestCase
     public function testWaitWithExecuteInsideResolve()
     {
         $ab = Async\resolve(function () {
-            yield Async\sleep(1);
+            yield Async\sleep(0.1);
             $res = yield Async\execute('echo ok');
             return $res;
         });
-        $out = Async\wait($ab, 2);
+        $out = Async\wait($ab, 0.2);
         $this->assertEquals('ok', trim($out));
     }
 

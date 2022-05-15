@@ -1,0 +1,39 @@
+name: tests
+
+on:
+    pull_request:
+        types:
+            - opened
+            - edited
+            - synchronize
+            - reopened
+    push:
+        branches:
+            - main
+            - master
+    workflow_dispatch:
+        inputs:
+            git-ref:
+                description: Optional git ref (commit/branch/etc)
+                required: false
+
+jobs:
+
+    phpunit:
+        name: phpunit
+        runs-on: ubuntu-latest
+        steps:
+            - name: Clone Repository (Latest)
+              uses: actions/checkout@v3
+              if: github.event.inputs.git-ref == ''
+            - name: Clone Repository (Custom Ref)
+              uses: actions/checkout@v3
+              if: github.event.inputs.git-ref != ''
+              with:
+                ref: ${{ github.event.inputs.git-ref }}
+            - name: Install composer
+              uses: php-actions/composer@v5
+            - name: Run tests
+              run: |
+                ./vendor/bin/phpunit
+

@@ -11,10 +11,10 @@ class Exception extends RootException
     protected $prev;
 
 
-    public function __construct(string $message = "", int $code = 0, $trace = null, Throwable $prev = null)
+    public function __construct(string $message = "", int $code = 0, $trace = null)
     {
         if (is_null($trace)) {
-            $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1024);
+            $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 16);
         } else {
             $called = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1);
             array_unshift($trace, $called[0]);
@@ -24,9 +24,31 @@ class Exception extends RootException
         $this->file = $trace[0]['file'];
         $this->line = $trace[0]['line'];
         $this->trace = $trace;
-        $this->prev = $prev;
     }
-        
+
+
+    public function __serialize(): array
+    {
+        return [
+            'code' => $this->code,
+            'message' => $this->message,
+            'file' => $this->file,
+            'line' => $this->line,
+            'trace' => $this->trace,
+        ];
+    }
+
+
+    public function __unserialize(array $data): void
+    {
+        $this->code = $data['code'];
+        $this->message = $data['message'];
+        $this->file = $data['file'];
+        $this->line = $data['line'];
+        $this->trace = $data['trace'];
+    }
+
+
 
     public function getAsyncTrace(): array
     {

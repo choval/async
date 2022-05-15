@@ -48,7 +48,7 @@ final class Async
      * Loads the memory limit from ini
      *
      */
-    public static function loadMemLimit($limit=null)
+    public static function loadMemLimit(?string $limit = null)
     {
         if (is_null($limit)) {
             $limit = ini_get('memory_limit');
@@ -195,11 +195,11 @@ final class Async
     /**
      * Wait
      */
-    public static function wait($promise, float $timeout = null, float $interval = 0.0001)
+    public static function wait($promise, ?float $timeout = null, float $interval = 0.001)
     {
         return static::waitWithLoop(static::getLoop(), $promise, $timeout, $interval);
     }
-    public static function waitWithLoop(LoopInterface $loop, $promise, float $timeout = null, float $interval = 0.0001)
+    public static function waitWithLoop(LoopInterface $loop, $promise, ?float $timeout = null, float $interval = 0.001)
     {
         return static::syncWithLoop($loop, $promise, $timeout, $interval);
     }
@@ -211,11 +211,11 @@ final class Async
      * We run Block\await with a catch multiple times, to avoid having
      * it block timers and promises added to the loop after calling sync.
      */
-    public static function sync($promise, float $timeout = null, float $interval = 0.0001)
+    public static function sync($promise, float $timeout = null, float $interval = 0.001)
     {
         return static::syncWithLoop(static::getLoop(), $promise, $timeout, $interval);
     }
-    public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null, float $interval = 0.0001)
+    public static function syncWithLoop(LoopInterface $loop, $promise, float $timeout = null, float $interval = 0.001)
     {
         if ($interval < 0) {
             throw new Exception('Interval must be 0 or positive float');
@@ -225,7 +225,7 @@ final class Async
         if (!is_a($promise, PromiseInterface::class)) {
             $promise = static::resolve($promise, $loop);
         }
-        if (!is_null($timeout)) {
+        if (!is_null($timeout) && $timeout > 0) {
             $promise = static::timeoutWithLoop($loop, $promise, $timeout);
         }
         $done = false;
@@ -290,118 +290,164 @@ final class Async
 
 
     /**
+     * Kills a process
+     */
+    protected static function waitProcessExits(int $pid, ?LoopInterface $loop = null)
+    {
+        if (!extension_loaded('pcntl')) {
+            throw new Exception('pcntl extension required', 500);
+        }
+        if ($pid <= 0) {
+            throw new Exception('PID must be greater than zero', 500);
+        }
+        if (!$loop) {
+            $loop = static::getLoop();
+        }
+        $defer = new Deferred();
+        $timer = $loop->addPeriodicTimer(0.001, function () use ($pid, $defer) {
+            $r = pcntl_waitpid($pid, $status, \WNOHANG);
+            if (!$r) {
+                $defer->resolve($r);
+            }
+        });
+        $defer->promise()->always(function () use ($timer, $loop) {
+            $loop->cancelTimer($timer);
+        });
+        return $defer->promise();
+    }
+    protected static function killProcess(int $pid, int $signal=15, ?LoopInterface $loop = null)
+    {
+        if (!extension_loaded('posix')) {
+            throw new Exception('posix extension required', 500);
+        }
+        if (!$loop) {
+            $loop = static::getLoop();
+        }
+        $promises = [];
+        exec("pstree -p $pid", $output);
+        $all = implode(' ', $output);
+        preg_match_all('/[0-9]+/', $all, $matches);
+        $pids = $matches[0] ?? [];
+        array_reverse($pids);
+        $pids = array_unique($pids);
+        foreach ($pids as $pid) {
+            $pid = intval($pid);
+            if ($pid) {
+                posix_kill($pid, $signal);
+                if ($loop) {
+                    $promises[] = static::waitProcessExits($pid, $loop);
+                }
+            }
+        }
+        if ($loop) {
+            return Promise\all($promises);
+        }
+        return;
+    }
+
+
+
+    /**
      * Execute
      */
-    public static function execute(string $cmd, float $timeout = 0, callable $outputfn=null)
+    public static function execute(string $cmd, float $timeout = 0, ?callable $outputfn = null)
     {
         return static::executeWithLoop(static::getLoop(), $cmd, $timeout, $outputfn);
     }
-    public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0, callable $outputfn=null)
+    public static function executeWithLoop(LoopInterface $loop, string $cmd, float $timeout = 0, ?callable $outputfn = null)
     {
-        if (!extension_loaded('pcntl')) {
-            throw new Exception('PHP extension pcntl not available', 500);
+        if (!extension_loaded('sockets')) {
+            throw new Exception('sockets extension required', 500);
         }
         if (is_null($timeout)) {
             $timeout = ini_get('max_execution_time');
         }
-        $proc = null;
-        $defer = new Deferred(function () use (&$proc, $loop) {
-            $loop->addTimer(0, function () use (&$proc) {
-                if ($proc) {
-                    $proc->stdin->end();
-                    foreach ($proc->pipes as $pipe) {
-                        $pipe->close();
+        $proc = new Process($cmd);
+        $err = false;
+        $timer = false;
+        // Defer with cancel callback
+        $defer = new Deferred(function () use ($proc, $loop, $cmd) {
+            $proc->stdin->end();
+            foreach ($proc->pipes as $pipe) {
+                $pipe->close();
+            }
+            $pid = $proc->getPid();
+            if ($pid) {
+                static::killProcess($pid, 9, $loop);
+            }
+        });
+        $id = bin2hex(random_bytes(16));
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3);
+        // Timeout
+        if ($timeout > 0) {
+            $timer = $loop->addTimer($timeout, function () use ($proc, &$err, $timeout, $loop, $defer) {
+                $err = new Exception('Timed out after ' . $timeout . ' secs');
+                $defer->reject($err);
+                $proc->stdin->end();
+                foreach ($proc->pipes as $pipe) {
+                    $pipe->close();
+                }
+                $pid = $proc->getPid();
+                if ($pid) {
+                    static::killProcess($pid, 15, $loop);
+                }
+            });
+        }
+        static::resolve(function () use ($loop, $timeout, $defer, $id, $trace, $proc, $outputfn, $timer, &$err) {
+            yield static::waitFreeFork($loop);
+            static::addFork($id, $defer->promise());
+            $buffer = '';
+            $echo = false;
+            if (!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
+                $echo = true;
+            }
+            $proc->start($loop);
+            // TODO: Writes buffer to a file if it gets too large
+            if ($outputfn) {
+                $proc->stdout->on('data', $outputfn);
+            } else {
+                $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
+                    $buffer .= $chunk;
+                    if ($echo) {
+                        $first = "  [ASYNC EXECUTE]  ";
+                        $chunk = trim($chunk);
+                        $lines = explode("\n", $chunk);
+                        foreach ($lines as $line) {
+                            fwrite(STDOUT, $first . $line . "\n");
+                        }
                     }
-                    $proc->terminate(9);    // SIGKILL
-                    $pid = $proc->getPid();
-                    posix_kill($pid, 9);
-                    pcntl_waitpid($pid, $status, \WNOHANG);
+                });
+            }
+            $proc->stdout->on('error', function (\Exception $e) use (&$err) {
+                $err = $e;
+            });
+            $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $timer, $loop, &$err, $proc, $id, $trace) {
+                static::removeFork($id);
+                if ($timer) {
+                    $loop->cancelTimer($timer);
+                }
+                $proc->stdin->end();
+                $proc->stdin->close();
+                $proc->stdout->close();
+                foreach ($proc->pipes as $pipe) {
+                    $pipe->close();
+                }
+                if ($err) {
+                    return $defer->reject($err);
+                }
+                if (!is_null($termSignal)) {
+                    return $defer->reject(new Exception('Process terminated with code: ' . $termSignal, $termSignal, $trace));
+                }
+                if ($exitCode) {
+                    return $defer->reject(new Exception('Process exited with code: ' . $exitCode . "\n$buffer", $exitCode, $trace));
+                }
+                $defer->resolve($buffer);
+                $pid = $proc->getPid();
+                if ($pid) {
+                    static::killProcess($pid, 15, $loop);
                 }
             });
         });
-        $id = random_bytes(16);
-        $trace = debug_backtrace();
-        static::waitFreeFork($loop)->done(
-            function () use ($loop, $cmd, $timeout, $defer, $id, $trace, &$proc, $outputfn) {
-                static::addFork($id, $defer->promise());
-                $buffer = '';
-                $proc = new Process($cmd);
-                $timer = false;
-                if ($timeout > 0) {
-                    $timer = $loop->addTimer($timeout, function () use ($proc, &$err, $timeout) {
-                        $proc->stdin->end();
-                        foreach ($proc->pipes as $pipe) {
-                            $pipe->close();
-                        }
-                        $proc->terminate(9);    // SIGKILL
-                        $pid = $proc->getPid();
-                        posix_kill($pid, 9);
-                        pcntl_waitpid($pid, $status, \WNOHANG);
-                        $err = new \RuntimeException('Process timed out in ' . $timeout . ' secs');
-                    });
-                }
-                $echo = false;
-                if (!empty(getenv('ASYNC_EXECUTE_ECHO'))) {
-                    $echo = true;
-                }
-                $proc->start($loop);
-                $pid = $proc->getPid();
-                // TODO: Writes buffer to a file if it gets too large
-                if ($outputfn) {
-                    $proc->stdout->on('data', $outputfn);
-                } else {
-                    $proc->stdout->on('data', function ($chunk) use (&$buffer, $echo) {
-                        $buffer .= $chunk;
-                        if ($echo) {
-                            $first = "  [ASYNC EXECUTE]  ";
-                            $chunk = trim($chunk);
-                            $lines = explode("\n", $chunk);
-                            foreach ($lines as $line) {
-                                fwrite(STDOUT, $first . $line . "\n");
-                            }
-                        }
-                    });
-                }
-                $proc->stdout->on('error', function (\Exception $e) use (&$err) {
-                    $err = $e;
-                });
-                $proc->on('exit', function ($exitCode, $termSignal) use ($defer, &$buffer, $timer, $loop, &$err, $proc, $id, $trace, $pid) {
-                    static::removeFork($id);
-                    if ($timer) {
-                        $loop->cancelTimer($timer);
-                    }
-                    $proc->stdin->end();
-                    $proc->stdin->close();
-                    $proc->stdout->close();
-                    foreach ($proc->pipes as $pipe) {
-                        $pipe->close();
-                    }
-                    // Clears any hanging processes
-                    if (empty($pid)) {
-                        $pid = $proc->getPid();
-                    }
-                    $loop->addTimer(0.0001, function () use ($pid) {
-                        pcntl_waitpid($pid, $status, \WNOHANG);
-                    });
-                    if ($err) {
-                        $code = $termSignal ?? $exitCode ?? $err->getCode();
-                        $msg = $err->getMessage();
-                        $e = new Exception($msg, $code, $trace, $err);
-                        return $defer->reject($e);
-                    }
-                    if (!is_null($termSignal)) {
-                        return $defer->reject(new Exception('Process terminated with code: ' . $termSignal, $termSignal, $trace));
-                    }
-                    if ($exitCode) {
-                        return $defer->reject(new Exception('Process exited with code: ' . $exitCode . "\n$buffer", $exitCode, $trace));
-                    }
-                    $defer->resolve($buffer);
-                });
-            },
-            function ($e) use ($defer) {
-                $defer->reject($e);
-            }
-        );
         return $defer->promise();
     }
 
@@ -410,16 +456,16 @@ final class Async
     /**
      * Timeout
      */
-    public static function timeout($func, float $timeout)
+    public static function timeout($fn, float $timeout)
     {
-        return static::timeoutWithLoop(static::getLoop(), $func, $timeout);
+        return static::timeoutWithLoop(static::getLoop(), $fn, $timeout);
     }
-    public static function timeoutWithLoop(LoopInterface $loop, $func, float $timeout)
+    public static function timeoutWithLoop(LoopInterface $loop, $fn, float $timeout)
     {
-        if (is_a($func, PromiseInterface::class)) {
-            $promise = $func;
+        if (is_a($fn, PromiseInterface::class)) {
+            $promise = $fn;
         } else {
-            $promise = static::resolve($func, $loop);
+            $promise = static::resolve($fn, $loop);
         }
         $defer = new Deferred(function ($resolve, $reject) use ($promise) {
             $promise->cancel();
@@ -448,13 +494,13 @@ final class Async
     /**
      * Retry
      */
-    public static function retry($func, int $retries = 10, float $frequency = 0.0001, $ignore_errors = null)
+    public static function retry($fn, int $retries = 10, float $frequency = 0.001, $ignores = null)
     {
-        return static::retryWithLoop(static::getLoop(), $func, $retries, $frequency, $ignore_errors);
+        return static::retryWithLoop(static::getLoop(), $fn, $retries, $frequency, $ignores);
     }
-    public static function retryWithLoop(LoopInterface $loop, $func, int $retries = 10, float $frequency = 0.0001, $ignore_errors = null)
+    public static function retryWithLoop(LoopInterface $loop, $fn, int $retries = 10, float $frequency = 0.001, $ignores = null)
     {
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3);
         $promise = null;
         $timer = null;
         $defer = new Deferred(function ($resolve, $reject) use (&$promise, &$timer, $loop) {
@@ -466,21 +512,21 @@ final class Async
             }
             $reject(new CancelException());
         });
-        if (is_null($ignore_errors)) {
-            $ignore_errors = \Exception::class;
+        if (is_null($ignores)) {
+            $ignores = \Exception::class;
         }
-        if (!is_array($ignore_errors)) {
-            $ignore_errors = [$ignore_errors];
+        if (!is_array($ignores)) {
+            $ignores = [$ignores];
         }
         $error = null;
-        $goodcb = function ($res) use ($defer) {
+        $on_success = function ($res) use ($defer) {
             $defer->resolve($res);
         };
-        $badcb = function ($e) use (&$promise, &$error, $defer, $ignore_errors) {
+        $on_fail = function ($e) use (&$promise, &$error, $defer, $ignores) {
             $error = $e;
             $error_message = $e->getMessage();
             $raise = true;
-            foreach ($ignore_errors as $ignore) {
+            foreach ($ignores as $ignore) {
                 if ($error_message == $ignore || is_a($e, $ignore)) {
                     $raise = false;
                     break;
@@ -493,28 +539,41 @@ final class Async
             }
         };
         $retries--;
-        $promise = static::resolve($func, $loop);
-        $promise->done($goodcb, $badcb);
-        $timer = $loop->addPeriodicTimer($frequency, function ($timer) use ($func, &$retries, &$error, $defer, &$promise, &$trace, $goodcb, $badcb, $loop) {
-            if (is_null($promise)) {
-                if ($retries < 0) {
-                    if (empty($error)) {
-                        $error = new Exception('Retry exhausted attempts', 0, $trace);
+        $promise = static::resolve($fn, $loop);
+        $promise->done($on_success, $on_fail);
+        $timer = $loop->addPeriodicTimer(
+            $frequency,
+            function ($timer) use (
+                $fn,
+                &$retries,
+                &$error,
+                $defer,
+                &$promise,
+                &$trace,
+                $on_success,
+                $on_fail,
+                $loop
+            ) {
+                if (is_null($promise)) {
+                    if ($retries < 0) {
+                        if (empty($error)) {
+                            $error = new Exception('Retry exhausted attempts', 0, $trace);
+                        }
+                        $loop->cancelTimer($timer);
+                        return $defer->reject($error);
                     }
-                    return $defer->reject($error);
+                    $retries--;
+                    $promise = static::resolve($fn, $loop);
+                    $promise->done($on_success, $on_fail);
                 }
-                $retries--;
-                $promise = static::resolve($func, $loop);
-                $promise->done($goodcb, $badcb);
+            }
+        );
+        $defer->promise()->always(function () use ($timer, $loop) {
+            if ($timer) {
+                $loop->cancelTimer($timer);
             }
         });
-        $defer_promise = $defer->promise();
-        $defer_promise->then(function () use ($timer, $loop) {
-            $loop->cancelTimer($timer);
-        }, function () use ($timer, $loop) {
-            $loop->cancelTimer($timer);
-        });
-        return $defer_promise;
+        return $defer->promise();
     }
 
 
@@ -522,59 +581,71 @@ final class Async
     /**
      * Async
      */
-    public static function async($func, $args = [])
+    public static function async($fn, array $args = [])
     {
-        return static::asyncWithLoop(static::getLoop(), $func, $args);
+        return static::asyncWithLoop(static::getLoop(), $fn, $args);
     }
-    public static function asyncWithLoop(LoopInterface $loop, $func, array $args = [])
+    public static function asyncWithLoop(LoopInterface $loop, $fn, array $args = [])
     {
         if (!extension_loaded('pcntl')) {
-            throw new Exception('PHP extension pcntl not available', 500);
+            throw new Exception('pcntl extension required', 500);
         }
-        $defer = new Deferred();
-        $id = random_bytes(16);
-        $trace = debug_backtrace();
+        if (!extension_loaded('posix')) {
+            throw new Exception('posix extension required', 500);
+        }
+        if (!extension_loaded('sockets')) {
+            throw new Exception('sockets extension required', 500);
+        }
+        $pid = false;
+        $id = bin2hex(random_bytes(16));
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3);
+        $defer = new Deferred(function () use (&$pid, $loop) {
+            static::removeFork($id);
+            if ($pid) {
+                static::killProcess($pid, 9, $loop);
+            }
+        });
+        $defer->promise()->always(function () use ($id, &$pid, $loop) {
+            static::removeFork($id);
+            if ($pid) {
+                static::killProcess($pid, 9, $loop);
+            }
+        });
         static::waitFreeFork($loop)->done(
-            function () use ($loop, $func, $args, $defer, $id, $trace) {
+            function () use ($loop, $fn, &$args, $defer, $id, &$trace, &$pid) {
                 static::addFork($id, $defer->promise());
-                $sockets = array();
-                $domain = (strtoupper(substr(PHP_OS, 0, 3)) == 'WIN' ? AF_INET : AF_UNIX);
-                if (socket_create_pair($domain, SOCK_STREAM, 0, $sockets) === false) {
-                    return new RejectedPromise(new Exception('socket_create_pair failed: ' . socket_strerror(socket_last_error()), 0, $trace));
+                // Only linux sockets
+                $sockets = [];
+                if (socket_create_pair(\AF_UNIX, \SOCK_STREAM, 0, $sockets) === false) {
+                    return $defer->reject(new Exception('socket_create_pair failed: ' . socket_strerror(socket_last_error()), 0, $trace));
                 }
-                gc_collect_cycles(); // Garbage collect before forking
+                gc_collect_cycles(); // Force GC before fork
                 $pid = pcntl_fork();
-
                 if ($pid == -1) {
-                    static::removeFork($id);
-                    return new RejectedPromise(new Exception('Async fork failed', 0, $trace));
+                    return $defer->reject(new Exception('Async fork failed', 0, $trace));
                 } elseif ($pid) {
                     // Parent
                     $buffer = '';
-                    $loop->addPeriodicTimer(0.0001, function ($timer) use ($pid, $defer, &$sockets, $loop, &$buffer, $id, $trace) {
+                    $loop->addPeriodicTimer(0.001, function ($timer) use ($pid, $defer, &$sockets, $loop, &$buffer, $id, $trace) {
                         while (($data = socket_recv($sockets[1], $chunk, 1024, \MSG_DONTWAIT)) > 0) { // !== false) {
                             $buffer .= $chunk;
                         }
-                        unset($chunk);
                         $waitpid = pcntl_waitpid($pid, $status, \WNOHANG);
-                        if ($waitpid > 0) {
-                            static::removeFork($id);
+                        if ($waitpid == $pid) {
                             $loop->cancelTimer($timer);
                             $data = unserialize($buffer);
-                            unset($buffer);
                             if (is_a($data, \Exception::class)) {
                                 $defer->reject($data);
                             } else {
                                 $defer->resolve($data);
                             }
-                            unset($data);
                             @socket_close($sockets[1]);
                             @socket_close($sockets[0]);
-                            unset($sockets);
                             return;
                         } elseif ($waitpid < 0) {
-                            unset($buffer);
-                            static::removeFork($id);
+                            $error_code = pcntl_get_last_error();
+                            $error_str = pcntl_strerror($error_code);
+                            fwrite(STDOUT, "error: $error_str\n\n");
                             $loop->cancelTimer($timer);
                             if (!pcntl_wifexited($status)) {
                                 $code = pcntl_wexitstatus($status);
@@ -587,35 +658,32 @@ final class Async
                         }
                     });
                 } else {
-                    /*
-                    if (static::$loop) {
-                        static::$loop->stop();
-                    }
-                     */
                     static::$forks=[];
+                    $loop = static::getLoop();
+                    $loop->stop();
                     // Child
-                    register_shutdown_function(function () {
-                        $sig = 9;   // SIGKILL doesn't close the resources
-                        posix_kill(getmypid(), $sig);
+                    register_shutdown_function(function () use ($loop) {
+                        // We use SIGKILL because it doesn't close resources
+                        posix_kill(getmypid(), 9);
                     });
                     $sid = posix_setsid();
                     if ($sid < 0) {
                         exit(1);
                     }
                     try {
-                        $res = call_user_func_array($func, $args);
+                        if ($fn instanceof PromiseInterface) {
+                            $res = static::syncWithLoop($loop, $fn);
+                        } else {
+                            $res = static::syncWithLoop($loop, call_user_func_array($fn, $args));
+                        }
                         $res = serialize($res);
-                        $written = socket_write($sockets[0], $res, strlen($res));
-                        if ($written === false) {
-                            exit(1);
-                        }
-                    } catch (\Throwable $e) {
-                        static::flattenExceptionBacktrace($e);
-                        $res = serialize($e);
-                        $written = socket_write($sockets[0], $res, strlen($res));
-                        if ($written === false) {
-                            exit(1);
-                        }
+                    } catch (\Exception $e) {
+                        $err = new Exception($e->getMessage(), $e->getCode(), $trace);
+                        $res = serialize($err);
+                    }
+                    $written = socket_send($sockets[0], $res, strlen($res), MSG_EOR|MSG_EOF);
+                    if ($written === false) {
+                        exit(1);
                     }
                     exit(0);
                 }
@@ -797,9 +865,9 @@ final class Async
      * Resolves silently.
      * Uses resolve.
      */
-    public static function resolveSilent($gen, &$exception=false, LoopInterface $loop = null)
+    public static function resolveSilent($fn, &$exception=false, ?LoopInterface $loop = null)
     {
-        $prom = static::resolve($gen, $loop);
+        $prom = static::resolve($fn, $loop);
         $defer = new Deferred(function ($resolve, $reject) use ($prom, &$exception) {
             $prom->cancel();
             $exception = new CancelException();
@@ -826,35 +894,35 @@ final class Async
      * - Promise
      * - Stream
      */
-    public static function resolve($gen, LoopInterface $loop = null)
+    public static function resolve($fn, ?LoopInterface $loop = null)
     {
-        if (is_a($gen, Closure::class)) {
+        if (is_a($fn, Closure::class)) {
             try {
-                while (is_a($gen, Closure::class)) {
-                    $gen = $gen();
+                while (is_a($fn, Closure::class)) {
+                    $fn = $fn();
                 }
             } catch (\Exception $e) {
                 return new RejectedPromise($e);
             }
         }
-        if (is_a($gen, Generator::class)) {
+        if (is_a($fn, Generator::class)) {
             if (is_null($loop)) {
                 $loop = static::$loop;
             }
             if ($loop) {
-                $gen = static::unwrapGeneratorWithLoop($gen, $loop);
+                $fn = static::unwrapGeneratorWithLoop($fn, $loop);
             } else {
-                while (is_a($gen, Generator::class)) {
-                    $gen = static::unwrapGenerator($gen);
+                while (is_a($fn, Generator::class)) {
+                    $fn = static::unwrapGenerator($fn);
                 }
             }
         }
-        if (is_a($gen, ReadableStreamInterface::class)) {
-            $prom = Stream\buffer($gen);
-        } elseif (is_a($gen, PromiseInterface::class)) {
-            $prom = $gen;
+        if (is_a($fn, ReadableStreamInterface::class)) {
+            $prom = Stream\buffer($fn);
+        } elseif (is_a($fn, PromiseInterface::class)) {
+            $prom = $fn;
         } else {
-            return new FulfilledPromise($gen);
+            return new FulfilledPromise($fn);
         }
         $canceled = false;
         $defer = new Deferred(function ($resolve, $reject) use ($prom, &$canceled) {
@@ -875,49 +943,6 @@ final class Async
             );
         return $defer->promise();
     }
-
-
-
-    /**
-     * From: https://gist.github.com/nh-mike/fde9f69a57bc45c5b491d90fb2ee08df
-     */
-    public static function flattenExceptionBacktrace(\Throwable $exception)
-    {
-        if (is_a($exception, \Exception::class)) {
-            $traceProperty = (new \ReflectionClass('Exception'))->getProperty('trace');
-        } else {
-            $traceProperty = (new \ReflectionClass('Error'))->getProperty('trace');
-        }
-        $traceProperty->setAccessible(true);
-        $flatten = function (&$value, $key) {
-            if (is_a($value, Closure::class)) {
-                $closureReflection = new \ReflectionFunction($value);
-                $value = sprintf(
-                    '(Closure at %s:%s)',
-                    $closureReflection->getFileName(),
-                    $closureReflection->getStartLine()
-                );
-            } elseif (is_object($value)) {
-                $value = sprintf('object(%s)', get_class($value));
-            } elseif (is_resource($value)) {
-                $value = sprintf('resource(%s)', get_resource_type($value));
-            }
-        };
-        $previousexception = $exception;
-        do {
-            if ($previousexception === null) {
-                break;
-            }
-            $exception = $previousexception;
-            $trace = $traceProperty->getValue($exception);
-            foreach ($trace as &$call) {
-                array_walk_recursive($call['args'], $flatten);
-            }
-            $traceProperty->setValue($exception, $trace);
-        } while ($previousexception = $exception->getPrevious());
-        $traceProperty->setAccessible(false);
-    }
-
 
 
     /**
@@ -948,11 +973,14 @@ final class Async
             $ignore_exp = false;
             $ignore_str = false;
             if ($ignore) {
-                $res = yield static::executeWithLoop($loop, __DIR__.'/is_valid_regexp '.escapeshellarg($ignore));
-                if ($res == 'yes') {
-                    $ignore_exp = $ignore;
-                } else {
+                $res = yield static::asyncWithLoop($loop, function () use ($ignore) {
+                    error_reporting(0);
+                    return preg_match($ignore, null) === false ? false : true;
+                });
+                if ($res === false) {
                     $ignore_str = $ignore;
+                } else {
+                    $ignore_exp = $ignore;
                 }
             }
             if ($ignore_exp) {
@@ -1057,15 +1085,18 @@ final class Async
     /**
      * Waits for this memory space
      */
-    public static function waitMemory(float $bytes, float $freq=0.000001)
+    public static function waitMemory(int $bytes, float $freq=0.001)
     {
         return static::waitMemoryWithLoop(static::getLoop(), $bytes, $freq);
     }
-    public static function waitMemoryWithLoop(LoopInterface $loop, float $bytes, float $freq=0.000001)
+    public static function waitMemoryWithLoop(LoopInterface $loop, int $bytes, float $freq=0.001)
     {
         $bytes += 16384;    // Required memory for this wait
         if (is_null(static::$mem_limit)) {
-            throw new Exception('Memory limit not available, please set it manually using `loadMemLimit`');
+            static::loadMemLimit();
+        }
+        if (is_null(static::$mem_limit)) {
+            return -1;
         }
         $usage = memory_get_usage();
         $diff = static::$mem_limit - $usage;
@@ -1098,14 +1129,14 @@ final class Async
     /**
      * Measures the time of a promise
      */
-    public static function timer($func, &$time)
+    public static function timer($fn, &$time)
     {
-        return static::timerWithLoop(static::getLoop(), $func, $time);
+        return static::timerWithLoop(static::getLoop(), $fn, $time);
     }
-    public static function timerWithLoop(LoopInterface $loop, $func, &$time)
+    public static function timerWithLoop(LoopInterface $loop, $fn, &$time)
     {
         $start = microtime(true);
-        $prom = static::resolve($func, $loop);
+        $prom = static::resolve($fn, $loop);
         $prom->always(function () use ($start, &$time) {
             $time = microtime(true) - $start;
         });

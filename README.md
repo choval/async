@@ -1,4 +1,4 @@
-[![tests](https://github.com/choval/async/actions/workflows/tests.yml/badge.svg)](https://github.com/chequeas/async/actions/workflows/tests.yml)
+[![tests](https://github.com/choval/async/actions/workflows/tests.yml/badge.svg)](https://github.com/choval/async/actions/workflows/tests.yml)
 
 # Choval\Async
 

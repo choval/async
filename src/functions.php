@@ -122,9 +122,7 @@ function wait(
     float $interval = 0.0001,
     ?LoopInterface $loop = null
 ) {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::waitWithLoop(
         loop: $loop,
         promise: $promise,
@@ -150,9 +148,7 @@ function sync(
     float $interval = 0.0001,
     ?LoopInterface $loop = null
 ) {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::syncWithLoop(
         loop: $loop,
         promise: $promise,
@@ -175,9 +171,7 @@ function sleep(
     float $time,
     ?LoopInterface $loop = null
 ) {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::sleepWithLoop(
         loop: $loop,
         time: $time
@@ -201,9 +195,7 @@ function execute(
     ?callable $outputfn=null,
     ?LoopInterface $loop=null
 ) {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::executeWithLoop(
         loop: $loop,
         cmd: $cmd,
@@ -228,9 +220,7 @@ function async(
     array $args = [],
     ?LoopInterface $loop = null
 ) {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::asyncWithLoop(
         loop: $loop,
         fn: $fn,
@@ -258,9 +248,7 @@ function retry(
     $ignores = null,
     ?LoopInterface $loop = null
 ) {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::retryWithLoop(
         loop: $loop,
         fn: $fn,
@@ -328,9 +316,7 @@ function buffer(ReadableStreamInterface $stream, int $maxLength = null)
  */
 function timeout($fn, float $timeout, ?LoopInterface $loop=null)
 {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::timeoutWithLoop($loop, $fn, $timeout);
 }
 
@@ -340,14 +326,19 @@ function timeout($fn, float $timeout, ?LoopInterface $loop=null)
  *
  * @param string $filename
  * @param bool $use_include_path = false
- * @param resource $context = ?
+ * @param Resource $context = ?
  * @param int $offset = 0
  * @param int $maxlen = ?
  *
  * @return string|false
  */
-function file_get_contents()
-{
+function file_get_contents(
+    string $filename,
+    bool $use_include_path = false,
+    $context = null,
+    int $offset = 0,
+    ?int $length = null
+) {
     return Async::call('file_get_contents', func_get_args());
 }
 
@@ -355,8 +346,12 @@ function file_get_contents()
 /**
  * File put contents
  */
-function file_put_contents()
-{
+function file_put_contents(
+    string $filename,
+    mixed $data,
+    int $flags = 0,
+    $context = null
+) {
     return Async::call('file_put_contents', func_get_args());
 }
 
@@ -364,114 +359,122 @@ function file_put_contents()
 /**
  * File exists
  */
-function file_exists()
-{
+function file_exists(
+    string $filename
+) {
     return Async::call('file_exists', func_get_args());
 }
 
 
-function is_file()
-{
+function is_file(
+    string $filename
+) {
     return Async::call('is_file', func_get_args());
 }
 
 
-function is_dir()
-{
+function is_dir(
+    string $filename
+) {
     return Async::call('is_dir', func_get_args());
 }
 
 
-function is_link()
-{
+function is_link(
+    string $filename
+) {
     return Async::call('is_link', func_get_args());
 }
 
 
-function sha1_file()
+function sha1_file(string $filename, bool $binary = false)
 {
     return Async::call('sha1_file', func_get_args());
 }
 
 
-function md5_file()
+function md5_file(string $filename, bool $binary = false)
 {
     return Async::call('md5_file', func_get_args());
 }
 
-function mime_content_type()
+function mime_content_type($filename)
 {
     return Async::call('mime_content_type', func_get_args());
 }
 
 
-function realpath()
+function realpath(string $path)
 {
     return Async::call('realpath', func_get_args());
 }
 
 
-function fileatime()
+function fileatime(string $filename)
 {
     return Async::call('fileatime', func_get_args());
 }
 
-function filectime()
+function filectime(string $filename)
 {
     return Async::call('filectime', func_get_args());
 }
 
-function filemtime()
+function filemtime(string $filename)
 {
     return Async::call('filemtime', func_get_args());
 }
 
-function file()
+function file(string $filename, int $flags = 0, $context = null)
 {
     return Async::call('file', func_get_args());
 }
 
-function filesize()
+function filesize(string $filename)
 {
     return ASync::call('filesize', func_get_args());
 }
 
-function copy()
+function copy(string $from, string $to, $context = null)
 {
     return Async::call('copy', func_get_args());
 }
 
-function rename()
+function rename(string $from, string $to, $context = null)
 {
     return Async::call('rename', func_get_args());
 }
 
-function unlink()
+function unlink(string $filename, $context = null)
 {
     return Async::call('unlink', func_get_args());
 }
 
-function touch()
+function touch(string $filename, ?int $mtime = null, ?int $atime = null)
 {
     return Async::call('touch', func_get_args());
 }
 
-function mkdir()
-{
+function mkdir(
+    string $directory,
+    int $permissions = 0777,
+    bool $recursive = false,
+    $context = null
+) {
     return Async::call('mkdir', func_get_args());
 }
 
-function rmdir()
+function rmdir(string $directory, $context = null)
 {
     return Async::call('rmdir', func_get_args());
 }
 
-function scandir()
+function scandir(string $directory, int $sorting_order = SCANDIR_SORT_ASCENDING, $context = null)
 {
     return Async::call('scandir', func_get_args());
 }
 
-function glob()
+function glob(string $pattern, int $flags = 0)
 {
     return Async::call('glob', func_get_args());
 }
@@ -484,9 +487,7 @@ function glob()
  */
 function rglob(string $pattern, string $ignore = '', int $flags = 0, ?LoopInterface $loop=null)
 {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::rglobWithLoop($loop, $pattern, $ignore, $flags);
 }
 
@@ -501,9 +502,7 @@ function rglob(string $pattern, string $ignore = '', int $flags = 0, ?LoopInterf
  */
 function is_done(PromiseInterface $promise, &$result=null, ?LoopInterface $loop=null)
 {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::isDoneWithLoop($loop, $promise, $result);
 }
 
@@ -516,9 +515,7 @@ function is_done(PromiseInterface $promise, &$result=null, ?LoopInterface $loop=
  */
 function wait_memory(int $bytes, float $freq=0.000001, ?LoopInterface $loop=null)
 {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::waitMemoryWithLoop($loop, $bytes, $freq);
 }
 
@@ -534,9 +531,7 @@ function wait_memory(int $bytes, float $freq=0.000001, ?LoopInterface $loop=null
  */
 function timer($fn, &$time, ?LoopInterface $loop=null)
 {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::timerWithLoop($loop, $fn, $time);
 }
 
@@ -551,9 +546,7 @@ function timer($fn, &$time, ?LoopInterface $loop=null)
  */
 function is_valid_regexp(string $regexp, ?LoopInterface $loop=null)
 {
-    if (is_null($loop)) {
-        $loop = Async::getLoop();
-    }
+    $loop ??= Async::getLoop();
     return Async::asyncWithLoop($loop, function () use ($regexp) {
         error_reporting(0);
         return preg_match($regexp, null) === false ? false : true;

@@ -1,0 +1,13 @@
+#!/bin/env php
+<?php
+$pid = pcntl_fork();
+if ($pid == -1) {
+    die('could not fork');
+} elseif ($pid) {
+    // parent
+    // During the sleep time, there's a zombie
+    sleep(100);
+} else {
+    // child
+    exit(0);
+}

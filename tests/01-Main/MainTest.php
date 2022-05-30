@@ -122,14 +122,12 @@ class MainTest extends TestCase
 
     public function testResolveNoCancelBeforeTimeout()
     {
-        function a()
-        {
+        $res = Async\wait(function () {
             return Async\resolve(function () {
                 yield Async\sleep(0.1);
                 return true;
             });
-        }
-        $res = Async\wait(a(), 0.2);
+        }, 0.2);
         $this->assertTrue($res);
     }
 

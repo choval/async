@@ -55,8 +55,8 @@ class ExecuteTest extends TestCase
         Async\wait(function () {
             $e = '';
             $res = yield Async\silent(Async\timeout(Async\execute('sleep 2'), 0.01), $e);
-            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
             $this->assertInstanceOf(AsyncException::class, $e);
+            $zombies = zombie_find();
             $this->assertEmpty($zombies);
         });
     }
@@ -67,7 +67,7 @@ class ExecuteTest extends TestCase
         Async\wait(function () {
             yield Async\silent(Async\execute('ls "this should return exit1"'), $e);
             $this->assertInstanceOf(AsyncException::class, $e);
-            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
+            $zombies = zombie_find();
             $this->assertEmpty($zombies);
 
             // Now, SPAM IT!
@@ -77,7 +77,7 @@ class ExecuteTest extends TestCase
                 $promises[] = Async\silent(Async\execute('ls "this should return exit1"'), $eses[$i]);
             }
             yield Promise\all($promises);
-            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
+            $zombies = zombie_find();
             $this->assertEmpty($zombies);
             foreach ($eses as $e) {
                 $this->assertInstanceOf(AsyncException::class, $e);
@@ -96,7 +96,11 @@ class ExecuteTest extends TestCase
                 $promises[] = Async\silent(Async\execute('sleep 1 && echo '.$i, 0.01), $eses[$i]);
             }
             yield Promise\all($promises);
-            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
+            $zombies = zombie_find();
+            echo "Found ".count($zombies)." zombies\n";
+            // Gives the system a sec to reap
+            yield Async\sleep(1);
+            $zombies = zombie_find();
             $this->assertEmpty($zombies);
             foreach ($eses as $i=>$e) {
                 $this->assertInstanceOf(AsyncException::class, $e);
@@ -112,7 +116,7 @@ class ExecuteTest extends TestCase
             $sleepbin = realpath($sleepbin);
             $cmd = 'echo chain && '.$sleepbin.' 2';
             yield Async\silent(Async\execute($cmd, 0.01));
-            $zombies = yield Async\silent(Async\execute('ps -o pid,state,cmd --ppid '.getmypid().'|grep Z|grep -v grep'));
+            $zombies = zombie_find();
             $this->assertEmpty($zombies);
         });
     }

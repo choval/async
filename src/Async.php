@@ -305,8 +305,8 @@ final class Async
         }
         $defer = new Deferred();
         $timer = $loop->addPeriodicTimer(0.001, function () use ($pid, $defer) {
-            $r = pcntl_waitpid($pid, $status, \WNOHANG);
-            if (!$r) {
+            $r = zombie_reap($pid);
+            if ($r >= 0) {
                 $defer->resolve($r);
             }
         });
@@ -333,10 +333,8 @@ final class Async
         foreach ($pids as $pid) {
             $pid = intval($pid);
             if ($pid) {
-                posix_kill($pid, $signal);
-                if ($loop) {
-                    $promises[] = static::waitProcessExits($pid, $loop);
-                }
+                $promises[$pid] = static::waitProcessExits($pid, $loop);
+                zombie_kill($pid);
             }
         }
         if ($loop) {
@@ -432,6 +430,10 @@ final class Async
                 foreach ($proc->pipes as $pipe) {
                     $pipe->close();
                 }
+                $pid = $proc->getPid();
+                if ($pid) {
+                    static::killProcess($pid, 15, $loop);
+                }
                 if ($err) {
                     return $defer->reject($err);
                 }
@@ -442,10 +444,6 @@ final class Async
                     return $defer->reject(new Exception('Process exited with code: ' . $exitCode . "\n$buffer", $exitCode, $trace));
                 }
                 $defer->resolve($buffer);
-                $pid = $proc->getPid();
-                if ($pid) {
-                    static::killProcess($pid, 15, $loop);
-                }
             });
         });
         return $defer->promise();
@@ -599,7 +597,7 @@ final class Async
         $pid = false;
         $id = bin2hex(random_bytes(16));
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3);
-        $defer = new Deferred(function () use (&$pid, $loop) {
+        $defer = new Deferred(function () use ($id, &$pid, $loop) {
             static::removeFork($id);
             if ($pid) {
                 static::killProcess($pid, 9, $loop);

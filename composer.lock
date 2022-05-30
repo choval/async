@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "31dcd7b1da4fb3589565fd4bab39ebd5",
+    "content-hash": "7f7efcaa9d7ae69b7b5396355de0a3e0",
     "packages": [
         {
             "name": "evenement/evenement",
@@ -456,6 +456,37 @@
         }
     ],
     "packages-dev": [
+        {
+            "name": "choval/zombie-reaper",
+            "version": "v1.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/choval/zombie-reaper.git",
+                "reference": "7d7189bee30b134057902ed3f0f3aa5fdb91ad3a"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/choval/zombie-reaper/zipball/7d7189bee30b134057902ed3f0f3aa5fdb91ad3a",
+                "reference": "7d7189bee30b134057902ed3f0f3aa5fdb91ad3a",
+                "shasum": ""
+            },
+            "type": "library",
+            "autoload": {
+                "files": [
+                    "src/fns.php"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "See LICENSE"
+            ],
+            "description": "Kills & reaps zombie processes in PHP",
+            "support": {
+                "issues": "https://github.com/choval/zombie-reaper/issues",
+                "source": "https://github.com/choval/zombie-reaper/tree/v1.0.0"
+            },
+            "time": "2022-05-25T22:18:45+00:00"
+        },
         {
             "name": "doctrine/instantiator",
             "version": "1.4.1",
